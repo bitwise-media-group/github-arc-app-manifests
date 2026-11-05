@@ -1,0 +1,17 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+#
+# The cloud-neutral core of the github-arc deployment: the namespace, the
+# scale-set chart source (input-provider) and the two runner scale sets
+# (resourceset: linux-amd64 and linux-arm64, each gated by its
+# GITHUB_ARC_<ARCH>_ENABLED var). Nothing here knows which nodes the runners
+# land on: each scale set reads its pod scheduling (nodeSelector,
+# tolerations) from a github-arc-linux-<arch>-scheduling ConfigMap the
+# per-cloud overlay (../aws, ../google) ships, beside the GitHub App secret
+# sync in its cloud's dialect and ../../flux, the image's self-definition.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - input-provider.yaml
+  - resourceset.yaml

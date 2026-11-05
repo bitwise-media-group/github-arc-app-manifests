@@ -1,0 +1,26 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# Pre-created by terraform (modules/aws or modules/google, as part of the
+# application-github-arc-inputs release) so the GitHub App credential can
+# sync before the scale sets deploy; this image adopts it via server-side
+# apply to stamp the Pod Security labels.
+#
+# privileged on all three modes, deliberately: every runner pod carries a
+# Docker-in-Docker sidecar whose dockerd needs privileged: true, which the
+# baseline and restricted profiles reject outright. The namespace holds
+# nothing but the runner pods and the chart's RBAC, and those pods run only
+# on the dedicated, tainted github-arc node capacity (the per-cloud
+# overlays), so the privilege never shares a node with another workload.
+# No platform Kyverno policy blocks privileged pods (the platform enforces
+# verify-platform-signature alone, which the mirrored runner and dind
+# images satisfy), so no PolicyException ships with this image - and none
+# ever may except these pods from the signature rule.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: github-arc
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

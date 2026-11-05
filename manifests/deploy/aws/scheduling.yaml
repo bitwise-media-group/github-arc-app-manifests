@@ -1,0 +1,48 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The runner pods' placement on aws, read by each scale set as valuesFrom
+# (../common/resourceset.yaml): the dedicated Karpenter NodePool per arch
+# (resourceset-nodes.yaml), selected by the label its nodes carry and
+# tolerating its taint, platform.bitwisemedia.uk/dedicated=github-arc:
+# NoSchedule, which keeps every other workload off the privileged runners'
+# nodes. Karpenter adds no Arm taint of its own (unlike GKE), and the
+# NodePool's kubernetes.io/arch requirement already fixes the arch, so the
+# selector alone is enough. The Cilium startup taint is deliberately NOT
+# tolerated: a runner waits for the node's network like everything else.
+#
+# A ConfigMap per scale set, present whether or not its arch is enabled: an
+# unread ConfigMap is inert, and the scale set's valuesFrom needs no gate.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-arc-linux-amd64-scheduling
+  namespace: github-arc
+data:
+  values.yaml: |
+    template:
+      spec:
+        nodeSelector:
+          platform.bitwisemedia.uk/node-pool: github-arc-amd64
+        tolerations:
+          - key: platform.bitwisemedia.uk/dedicated
+            operator: Equal
+            value: github-arc
+            effect: NoSchedule
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-arc-linux-arm64-scheduling
+  namespace: github-arc
+data:
+  values.yaml: |
+    template:
+      spec:
+        nodeSelector:
+          platform.bitwisemedia.uk/node-pool: github-arc-arm64
+        tolerations:
+          - key: platform.bitwisemedia.uk/dedicated
+            operator: Equal
+            value: github-arc
+            effect: NoSchedule

@@ -1,0 +1,54 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The runner pods' placement on google, read by each scale set as
+# valuesFrom (../common/resourceset.yaml): the dedicated scale-to-zero GKE
+# node pool modules/google creates per arch (github-arc-<arch>), selected
+# by GKE's own pool label - which also stops node auto-provisioning from
+# minting a look-alike pool when ours is at max_nodes - and tolerating the
+# pool's taint, platform.bitwisemedia.uk/dedicated=github-arc:NoSchedule,
+# which keeps every other workload off the privileged runners' nodes.
+#
+# arm64 tolerates GKE's own Arm taint too: GKE stamps
+# kubernetes.io/arch=arm64:NoSchedule on every Arm node by itself, so a pod
+# that tolerates only the pool's taint still never lands there.
+#
+# A ConfigMap per scale set, present whether or not its arch is enabled: an
+# unread ConfigMap is inert, and the scale set's valuesFrom needs no gate.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-arc-linux-amd64-scheduling
+  namespace: github-arc
+data:
+  values.yaml: |
+    template:
+      spec:
+        nodeSelector:
+          cloud.google.com/gke-nodepool: github-arc-amd64
+        tolerations:
+          - key: platform.bitwisemedia.uk/dedicated
+            operator: Equal
+            value: github-arc
+            effect: NoSchedule
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: github-arc-linux-arm64-scheduling
+  namespace: github-arc
+data:
+  values.yaml: |
+    template:
+      spec:
+        nodeSelector:
+          cloud.google.com/gke-nodepool: github-arc-arm64
+        tolerations:
+          - key: platform.bitwisemedia.uk/dedicated
+            operator: Equal
+            value: github-arc
+            effect: NoSchedule
+          - key: kubernetes.io/arch
+            operator: Equal
+            value: arm64
+            effect: NoSchedule

@@ -1,0 +1,232 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The runner scale sets: the mirrored gha-runner-scale-set chart, verified
+# against the platform chart identity, installed once per elected
+# architecture as HelmRelease linux-<arch> - the release name is the
+# runnerScaleSetName, which is the `runs-on:` label a workflow targets
+# (runs-on: linux-amd64 / runs-on: linux-arm64). Both scale to zero
+# (minRunners: 0): an idle cluster runs no runner pods and, through the
+# per-cloud capacity, no runner nodes.
+#
+# Why a resourcesTemplate rather than plain HelmReleases:
+#
+#   - The per-arch gate. kustomize cannot conditionally emit a resource,
+#     and flux's post-build substitution only fills scalars, so
+#     GITHUB_ARC_<ARCH>_ENABLED is compared inside the template text, where
+#     a disabled arch renders no HelmRelease at all (and an already
+#     installed one is garbage-collected by the ResourceSet - an uninstall,
+#     not a zero-scaled leftover). The vars are read inline, never through
+#     spec.inputs: post-build substitution round-trips spec.inputs through
+#     YAML, turning "true"/"false" into bools and an empty value into null.
+#   - The chart tag comes from the input provider (input-provider.yaml),
+#     and the OCIRepository's verify block changes SHAPE with the signing
+#     mode (the cosign-pub Secret in keyed mode, the Fulcio identities
+#     keyless), exactly as the platform's arc component renders it.
+#
+# The dind images. containerMode.type: dind would render the sidecar from a
+# chart helper that hardcodes `image: docker:dind` (no value overrides it),
+# which Kyverno's verify-platform-signature rejects - only mirrored images
+# pass. Rather than post-render the chart's output, containerMode is left
+# UNSET and the dind pod is spelled out in template.spec below, the
+# expanded form the ARC documentation gives for customising dind. That is
+# the more robust of the two options: the AutoscalingRunnerSet is a CRD, so
+# a kustomize postRenderer cannot strategic-merge its containers by name
+# (no schema, so lists replace wholesale), and a JSON patch must address the
+# sidecar by index - an index the chart decides, and moves between
+# initContainers (Kubernetes >= 1.29, native sidecar) and containers (older)
+# from .Capabilities. Spelled out, every image in the pod is a plain value
+# this file owns, renders identically on every cluster, and cannot drift
+# under a chart bump; the cost is tracking upstream's dind template by
+# hand, which has been stable across the 0.x line.
+#
+# The images are referenced by tag, the platform convention: the
+# flux-containers mirror copies each locked digest under its upstream tag
+# (docker:dind is locked to the digest its images.lock.yaml records, and
+# re-locked only through a reviewed mirror PR), and Kyverno verifies the
+# mirror's signature on whatever digest the tag resolves to.
+#
+# Scheduling is the overlay's: each HelmRelease merges
+# github-arc-linux-<arch>-scheduling (values.yaml: template.spec
+# nodeSelector + tolerations) under its own values, so the dedicated node
+# pool (google) or Karpenter NodePool (aws) is selected without this file
+# knowing which cloud it is on. The GitHub App credential is the Secret
+# github-arc-github-app (github_app_id, github_app_installation_id,
+# github_app_private_key), synced by the same overlay.
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: github-arc
+  namespace: github-arc
+spec:
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      name: github-arc
+  resourcesTemplate: |
+    << $keyed := ne "${SIGNED_IDENTITY_KMS_KEY:=}" "" >>
+    << $runners := dict >>
+    << $_ := set $runners "amd64" (dict "enabled" "${GITHUB_ARC_AMD64_ENABLED}" "maxRunners" "${GITHUB_ARC_AMD64_MAX_RUNNERS}" "cpu" "${GITHUB_ARC_AMD64_CPU}" "memory" "${GITHUB_ARC_AMD64_MEMORY}") >>
+    << $_ := set $runners "arm64" (dict "enabled" "${GITHUB_ARC_ARM64_ENABLED}" "maxRunners" "${GITHUB_ARC_ARM64_MAX_RUNNERS}" "cpu" "${GITHUB_ARC_ARM64_CPU}" "memory" "${GITHUB_ARC_ARM64_MEMORY}") >>
+    << if ne "${COSIGN_PUBLIC_KEY:=}" "" >>
+    ---
+    # The signing key's public half (published base64-encoded by terraform,
+    # so it drops straight into data); source-controller verifies the chart
+    # artifact against it in keyed mode.
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: cosign-pub
+      namespace: github-arc
+    type: Opaque
+    data:
+      cosign.pub: ${COSIGN_PUBLIC_KEY:=}
+    << end >>
+    ---
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    metadata:
+      name: gha-runner-scale-set
+      namespace: github-arc
+    spec:
+      interval: 1h
+      url: oci://${PLATFORM_REGISTRY}/charts/gha-runner-scale-set
+      provider: "${OCI_PROVIDER:=gcp}"
+      ref:
+        tag: << inputs.tag >>
+      verify:
+        provider: cosign
+        << if $keyed >>
+        # Keyed: verified against the KMS signing key's public half.
+        secretRef:
+          name: cosign-pub
+        << else >>
+        # Keyless: the chart must carry a Fulcio certificate from the
+        # flux-containers publish workflow. Single-quoted: the values are
+        # regexes whose backslashes a double-quoted scalar would mangle.
+        matchOIDCIdentity:
+          - issuer: '${SIGNED_IDENTITY_ISSUER}'
+            subject: '${SIGNED_IDENTITY_CHARTS}'
+        << end >>
+    << range $arch, $runner := $runners >>
+    << if eq $runner.enabled "true" >>
+    ---
+    apiVersion: helm.toolkit.fluxcd.io/v2
+    kind: HelmRelease
+    metadata:
+      name: linux-<< $arch >>
+      namespace: github-arc
+    spec:
+      interval: 30m
+      timeout: 5m
+      chartRef:
+        kind: OCIRepository
+        name: gha-runner-scale-set
+        namespace: github-arc
+      # The per-cloud overlay's pod scheduling, merged UNDER values below
+      # (valuesFrom first, values last, maps deep-merged): it carries only
+      # template.spec.nodeSelector and template.spec.tolerations, keys
+      # values never sets.
+      valuesFrom:
+        - kind: ConfigMap
+          name: github-arc-linux-<< $arch >>-scheduling
+          valuesKey: values.yaml
+      values:
+        githubConfigUrl: ${GITHUB_ARC_CONFIG_URL}
+        # the pre-defined-secret form (a string, not a map): the chart
+        # renders no Secret of its own and reads the synced one
+        githubConfigSecret: github-arc-github-app
+        runnerScaleSetName: linux-<< $arch >>
+        << if ne "${GITHUB_ARC_RUNNER_GROUP}" "" >>
+        runnerGroup: "${GITHUB_ARC_RUNNER_GROUP}"
+        << end >>
+        minRunners: 0
+        maxRunners: << $runner.maxRunners >>
+        # the platform arc component's release (arc) in arc-systems: the
+        # chart derives the controller ServiceAccount as
+        # <release>-gha-rs-controller
+        controllerServiceAccount:
+          namespace: arc-systems
+          name: arc-gha-rs-controller
+        # containerMode deliberately unset - the dind pod is spelled out
+        # below (see the header); the chart's own dind template would
+        # reach Docker Hub.
+        template:
+          spec:
+            initContainers:
+              # copies the runner's externals (node, the job hooks) into a
+              # volume the dind daemon also mounts, so `docker run` steps
+              # that bind-mount them find them
+              - name: init-dind-externals
+                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:2.338.0
+                command: ["cp"]
+                args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+                volumeMounts:
+                  - name: dind-externals
+                    mountPath: /home/runner/tmpDir
+              # the Docker daemon as a native sidecar (restartPolicy:
+              # Always on an init container): started before the runner,
+              # stopped after it. privileged is what dockerd needs, and why
+              # the namespace is PSS privileged and the pods run only on
+              # dedicated capacity.
+              - name: dind
+                image: ${CONTAINER_REGISTRY}/images/docker.io/library/docker:dind
+                args:
+                  - dockerd
+                  - --host=unix:///var/run/docker.sock
+                  - --group=$(DOCKER_GROUP_GID)
+                env:
+                  # the runner image's docker group, so the runner user can
+                  # use the socket without root
+                  - name: DOCKER_GROUP_GID
+                    value: "123"
+                securityContext:
+                  privileged: true
+                restartPolicy: Always
+                startupProbe:
+                  exec:
+                    command:
+                      - docker
+                      - info
+                  initialDelaySeconds: 0
+                  failureThreshold: 24
+                  periodSeconds: 5
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+                  - name: dind-externals
+                    mountPath: /home/runner/externals
+            containers:
+              - name: runner
+                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:2.338.0
+                command: ["/home/runner/run.sh"]
+                env:
+                  - name: DOCKER_HOST
+                    value: unix:///var/run/docker.sock
+                  - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+                    value: "120"
+                # Requests only, sized so one runner fills one node of its
+                # pool (the module's per-arch cpu/memory): the scheduler
+                # then never packs two jobs onto a node, and the dind
+                # daemon - where `docker build` actually runs - shares the
+                # node's remainder. No limits: a CPU limit only throttles a
+                # build, and a memory limit OOM-kills it mid-job.
+                resources:
+                  requests:
+                    cpu: "<< $runner.cpu >>"
+                    memory: "<< $runner.memory >>"
+                volumeMounts:
+                  - name: work
+                    mountPath: /home/runner/_work
+                  - name: dind-sock
+                    mountPath: /var/run
+            volumes:
+              - name: work
+                emptyDir: {}
+              - name: dind-sock
+                emptyDir: {}
+              - name: dind-externals
+                emptyDir: {}
+    << end >>
+    << end >>

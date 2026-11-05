@@ -1,0 +1,16 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+#
+# The image's self-definition: the two flux-system objects modules/aws and
+# modules/google seed once (through the cluster modules' modules/application)
+# - the ResourceSetInputProvider that follows this image's version tags, and
+# the ResourceSet that turns the newest tag into an OCIRepository +
+# Kustomization. Every deploy tree includes this directory, so the first
+# reconcile of the seeded Kustomization adopts both objects and the image
+# owns itself from then on - a new manifests release can change the semver
+# floor, the dependencies, the verify identity, without a terraform apply.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - input-provider.yaml
+  - resourceset.yaml

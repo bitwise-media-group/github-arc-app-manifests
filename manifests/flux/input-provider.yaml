@@ -1,0 +1,39 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# Follows this image's version tags in the platform registry. The names,
+# namespace and the prune label are the seed contract with the cluster
+# modules (terraform-aws-eks-flux / terraform-google-gke-flux create an
+# identical object once, bootstrap-only); change any of them together or
+# the seed and the image stop describing the same object.
+#
+# kustomize.toolkit.fluxcd.io/prune: disabled - the Kustomization this
+# provider ultimately produces applies THIS object (deploy/<tree> includes
+# ../../flux), so the provider must never be prunable by its own child: an
+# image that dropped flux/ by mistake would otherwise garbage-collect the
+# provider, the ResourceSet, the Kustomization and every github-arc object
+# with it.
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: github-arc-manifests
+  namespace: flux-system
+  labels:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: 30m
+spec:
+  # the image lives in the platform registry, so the cluster's tag-listing
+  # dialect applies (ECRArtifactTag on aws; the google module publishes no
+  # var and rides the GAR default)
+  type: ${ARTIFACT_TAG_PROVIDER:=GARArtifactTag}
+  url: oci://${PLATFORM_REGISTRY}/manifests/github-arc
+  filter:
+    # Version tags only (X.Y.Z); the channel tags never match a semver
+    # range, so a cluster follows releases within the range and a human
+    # moves the range, not the tag. Constraint order matters: kustomize
+    # drops the quotes, so the default must not start with '>' or YAML reads
+    # it as a folded block scalar. A range matching NO tag empties the
+    # ResourceSet, which prunes github-arc - keep the floor honest.
+    semver: "${GITHUB_ARC_MANIFESTS_SEMVER:=<1.0.0 >=0.1.0}"
+    limit: 1

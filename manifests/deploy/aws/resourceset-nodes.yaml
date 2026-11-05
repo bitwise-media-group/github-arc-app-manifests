@@ -1,0 +1,91 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The runners' dedicated capacity on aws: one Karpenter NodePool per
+# elected arch, github-arc-amd64 / github-arc-arm64, each scaling from zero
+# on a pending runner pod and back to zero once its nodes are empty.
+#
+# Every NodePool references the platform's shared node class,
+# EC2NodeClass default (the karpenter component's contract: terraform's node
+# role, the discovery-tagged subnets and security group, the cluster's AMI
+# selection), and adds only the runner-specific shape: the arch, capacity
+# types and instance families from the GITHUB_ARC_<ARCH>_* vars, the
+# dedicated taint the runner pods alone tolerate, the node-pool label they
+# select, and ceilings. The Cilium bootstrap taint is repeated as a startup
+# taint, exactly as the platform's default NodePool carries it: nothing
+# schedules until the Cilium agent has given the node an address.
+#
+# consolidationPolicy WhenEmpty, never WhenEmptyOrUnderutilized: a CI job
+# is a long-running pod that must not be evicted to repack nodes, so a node
+# is only ever removed once its runner has gone (after consolidateAfter).
+#
+# A ResourceSet, not plain manifests, for the same reasons as the platform's
+# karpenter-nodes: the per-arch gate (GITHUB_ARC_<ARCH>_ENABLED, compared
+# inline) and the comma-joined list vars (splitList) need a text template,
+# and dependsOn holds it until the NodePool CRD exists (the seed's
+# Kustomization also depends on the karpenter Kustomization). No inputs:
+# the template reads only substituted vars, so it renders once.
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: github-arc-nodes
+  namespace: github-arc
+spec:
+  dependsOn:
+    - apiVersion: apiextensions.k8s.io/v1
+      kind: CustomResourceDefinition
+      name: nodepools.karpenter.sh
+  resourcesTemplate: |
+    << $pools := dict >>
+    << $_ := set $pools "amd64" (dict "enabled" "${GITHUB_ARC_AMD64_ENABLED}" "families" "${GITHUB_ARC_AMD64_INSTANCE_FAMILIES}" "capacityTypes" "${GITHUB_ARC_AMD64_CAPACITY_TYPES}" "cpu" "${GITHUB_ARC_AMD64_CPU_LIMIT}" "memory" "${GITHUB_ARC_AMD64_MEMORY_LIMIT}" "nodes" "${GITHUB_ARC_AMD64_MAX_NODES}" "consolidateAfter" "${GITHUB_ARC_AMD64_CONSOLIDATE_AFTER}") >>
+    << $_ := set $pools "arm64" (dict "enabled" "${GITHUB_ARC_ARM64_ENABLED}" "families" "${GITHUB_ARC_ARM64_INSTANCE_FAMILIES}" "capacityTypes" "${GITHUB_ARC_ARM64_CAPACITY_TYPES}" "cpu" "${GITHUB_ARC_ARM64_CPU_LIMIT}" "memory" "${GITHUB_ARC_ARM64_MEMORY_LIMIT}" "nodes" "${GITHUB_ARC_ARM64_MAX_NODES}" "consolidateAfter" "${GITHUB_ARC_ARM64_CONSOLIDATE_AFTER}") >>
+    << range $arch, $pool := $pools >>
+    << if eq $pool.enabled "true" >>
+    << $families := compact (splitList "," $pool.families) >>
+    ---
+    apiVersion: karpenter.sh/v1
+    kind: NodePool
+    metadata:
+      name: github-arc-<< $arch >>
+    spec:
+      template:
+        metadata:
+          labels:
+            platform.bitwisemedia.uk/node-pool: github-arc-<< $arch >>
+        spec:
+          nodeClassRef:
+            group: karpenter.k8s.aws
+            kind: EC2NodeClass
+            name: default
+          taints:
+            - key: platform.bitwisemedia.uk/dedicated
+              value: github-arc
+              effect: NoSchedule
+          startupTaints:
+            - key: node.cilium.io/agent-not-ready
+              value: "true"
+              effect: NoExecute
+          requirements:
+            - key: kubernetes.io/os
+              operator: In
+              values: ["linux"]
+            - key: kubernetes.io/arch
+              operator: In
+              values: ["<< $arch >>"]
+            - key: karpenter.sh/capacity-type
+              operator: In
+              values: << toJson (compact (splitList "," $pool.capacityTypes)) >>
+            << if $families >>
+            - key: karpenter.k8s.aws/instance-family
+              operator: In
+              values: << toJson $families >>
+            << end >>
+      limits:
+        cpu: "<< $pool.cpu >>"
+        memory: "<< $pool.memory >>"
+        nodes: "<< $pool.nodes >>"
+      disruption:
+        consolidationPolicy: WhenEmpty
+        consolidateAfter: "<< $pool.consolidateAfter >>"
+    << end >>
+    << end >>
