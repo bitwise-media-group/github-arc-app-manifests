@@ -1,0 +1,8 @@
+tests/schemas/**
+tests/*.env
+.build/**
+**/.terraform.lock.hcl
+**/.terraform/**
+site/**
+.cache/**
+.venv/**

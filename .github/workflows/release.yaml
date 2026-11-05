@@ -1,0 +1,63 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# Release pipeline — thin caller for the org's reusable release workflow.
+# release-please watches main and keeps a release PR current from the
+# Conventional Commit history; when that PR merges the workflow cuts the GitHub
+# release + vX.Y.Z tag. There is no .goreleaser.yaml here — the release event
+# triggers publish.yaml, which pushes the signed OCI artifact to the platform
+# registry and moves the staging channel tag. The reusable workflow's docs job
+# sees zensical.toml and publishes the documentation site, built at the release
+# tag, to GitHub Pages (oss.bitwisemedia.uk/github-arc-app-manifests/; needs
+# Settings -> Pages -> Source -> GitHub Actions).
+#
+# app-client-id/app-private-key author the release-please PR as the "FF Merge"
+# App instead of the GITHUB_TOKEN. A GITHUB_TOKEN-authored push fires no
+# workflow_run, so a release PR opened that way never triggers the auto-merge in
+# merge.yaml; authoring it as the App makes the release PR auto-merge once
+# approved and green, like any other.
+#
+# The reusable workflow is pinned to a full commit SHA (tag in the comment) so a
+# moved tag can never change what runs; Renovate keeps the pin fresh.
+name: Release
+
+on:
+    push:
+        branches: [main]
+    # allow cutting a release manually from the Actions tab
+    workflow_dispatch:
+
+permissions: {}
+
+jobs:
+    release:
+        uses: bitwise-media-group/github-workflows/.github/workflows/release.yaml@08001c85620929f6fe58a83ecec5313536290ab1 # v8.1.0
+        # ceiling for the reusable workflow's release-please job. GitHub resolves
+        # a reusable workflow's permissions as the union of every job and ignores
+        # `if:`, so the caller grants the goreleaser job's ceiling even though it
+        # is skipped here (no .goreleaser.yaml).
+        permissions:
+            # create the release/tag and upload assets
+            contents: write
+            # release-please creates pr labels via the issues api
+            issues: write
+            # release-please opens the release pull request
+            pull-requests: write
+            # cosign keyless signing (goreleaser; skipped in this repo), and the
+            # OIDC token the docs job's deploy-pages exchanges for the deploy
+            id-token: write
+            # push container images to ghcr (goreleaser; skipped in this repo)
+            packages: write
+            # github build-provenance attestation (skipped in this repo)
+            attestations: write
+            # artifact storage record for the attestation (skipped in this repo)
+            artifact-metadata: write
+            # publish the documentation site's GitHub Pages deployment (docs job)
+            pages: write
+        with:
+            # author the release PR as the FF Merge App so it can auto-merge (a
+            # GITHUB_TOKEN-authored push fires no workflow_run to trigger the merge)
+            app-client-id: ${{ vars.FF_MERGE_CLIENT_ID }}
+        secrets:
+            # private key for the App that authors the release PR (same App as /merge)
+            app-private-key: ${{ secrets.FF_MERGE_PRIVATE_KEY }}

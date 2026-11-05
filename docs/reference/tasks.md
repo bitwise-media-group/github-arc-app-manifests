@@ -1,0 +1,47 @@
+# Tasks & validation
+
+Every verb is a [mise](https://mise.jdx.dev) task. The shared [toolchain](https://oss.bitwisemedia.uk/toolchain/),
+mounted at `.mise/`, provides the pinned tools and the common lint contract, the python archetype adds the docs-site
+tasks, and the repository's `tasks.toml` carries the validation surface. The `Makefile` only forwards: `make <task>` is
+`mise run <task>`.
+
+| Task                  | What it does                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `make test`           | `test-manifests`, then `test-modules`                                                      |
+| `make test-manifests` | the render + schema harness, `scripts/validate.sh`                                         |
+| `make test-modules`   | `terraform init` + `validate` + `test` (mocked providers) in each module                   |
+| `make lint`           | license headers, prose, shell, actionlint + zizmor, and kubescape over the per-cloud trees |
+| `make fmt`            | prose format, `terraform fmt`, license headers                                             |
+| `make build`          | `zensical build` of this site into `site/`                                                 |
+| `make serve`          | this site on <http://localhost:8006>, with live reload                                     |
+| `make ci`             | `lint`, `test` and `build`: what the reusable CI workflow runs                             |
+| `make pr`             | `fmt`, `lint`, `test` and `build`: the full local gate before a pull request               |
+| `make help`           | every task                                                                                 |
+
+## The render harness
+
+`scripts/validate.sh` renders and validates everything a cluster would apply from this image, once per deploy tree and
+signing mode (`{aws,google}` × `{keyless,keyed}`):
+
+1. **kustomize-build** the deploy tree (common + flux + the cloud overlay).
+2. **Substitute** `cluster-vars` and `github-arc-vars` from the fixtures in `tests/` the way the seeded Kustomization does
+   (`postBuild.substituteFrom`), faithfully to the controller's roundtrip. Substitution is strict, so a variable neither
+   ConfigMap publishes fails; and a null guard fails any `${VAR}`-bearing scalar that would become null on a cluster.
+3. **Assert the seed contract**: the `flux/` objects carry exactly the names, namespace and prune label the
+   `modules/application` seed creates. See [The seed contract](../concepts/seed-contract.md).
+4. **Render every ResourceSet** with `flux-operator build resourceset` and the sample inputs under `tests/inputs/`.
+5. **kubeconform** the results against the Flux, flux-operator and vendored CRD schemas in `tests/schemas/`.
+
+The null guard runs a self-test first, so a guard that has rotted aborts the run rather than passing silently.
+
+## The module tests
+
+`make test-modules` runs `terraform test` in `modules/aws` and `modules/google`, against
+mocked providers. `modules/aws` and `modules/google` call the cluster modules' `modules/application` from git, so `init`
+needs network access; nothing else is reached.
+
+## The task file
+
+```toml
+--8<-- "tasks.toml"
+```

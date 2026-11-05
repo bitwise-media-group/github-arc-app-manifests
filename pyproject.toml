@@ -1,0 +1,18 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The github-arc-app-manifests documentation site (Zensical via uv). Not a Python
+# package: no [build-system], so the python archetype's build runs only
+# `zensical build`.
+[project]
+name = "github-arc-app-manifests-docs"
+version = "0.1.0"
+description = "Documentation site for the BitWise Media Group github-arc application image (self-hosted GitHub Actions runners) and its terraform installers, built with Zensical."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "BitWise Media Group Ltd.", email = "oss@bitwisemedia.uk" }]
+dependencies = [
+  "zensical>=0.0.69",
+]

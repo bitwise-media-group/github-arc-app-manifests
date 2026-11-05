@@ -1,0 +1,87 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+#
+# Repo-local tasks, included after the toolchain's common tasks and the
+# python archetype: the manifests validation harness and the terraform module
+# test suites. The archetype is here only for the documentation site
+# (zensical.toml + docs/): it supplies sync, docs-build, serve and build
+# (`zensical build` via uv). lint is common's (license headers, prose,
+# actionlint + zizmor, shell, and the kustomize config scans through the
+# lint-kustomize replacement below), restated so the archetype's ruff pass
+# stays out; fmt is common's plus terraform fmt.
+
+# Included after the python archetype, so this lint replaces its whole task:
+# it repeats common's rollup and nothing more (there is no python to ruff).
+[lint]
+description = "prose lint + license, container, shell and workflow checks"
+run = [
+  { task = "license-check" },
+  { task = "lint-containers" },
+  { task = "lint-shell" },
+  { task = "lint-workflows" },
+  { task = "lint-prose" },
+]
+
+[test]
+description = "render + schema-validate the manifests, then terraform test the modules"
+run = [{ task = "test-manifests" }, { task = "test-modules" }]
+
+[test-manifests]
+description = "kustomize build, cluster-vars + github-arc-vars substitution, resourceset render, kubeconform"
+dir = "{{config_root}}"
+run = "./scripts/validate.sh"
+
+# modules/aws and modules/google call the cluster modules' modules/application
+# (and, on google, modules/node-pool) from git, so init needs network (the
+# providers are mocked, nothing else is reached).
+[test-modules]
+description = "terraform test (mocked providers) for modules/aws and modules/google"
+dir = "{{config_root}}"
+run = """
+set -eu
+for dir in modules/aws modules/google; do
+  echo "==> $dir"
+  {{vars.terraform_binary}} -chdir="$dir" init -backend=false -input=false > /dev/null
+  {{vars.terraform_binary}} -chdir="$dir" validate
+  {{vars.terraform_binary}} -chdir="$dir" test
+done
+"""
+
+[fmt-terraform]
+hide = true
+dir = "{{config_root}}"
+run = "{{vars.terraform_binary}} fmt -recursive modules"
+
+[fmt]
+description = "format prose and terraform, inject license headers"
+run = [{ task = "fmt-prose" }, { task = "fmt-terraform" }, { task = "license" }]
+
+# Repo-local replacement for the toolchain's lint-kustomize: kubescape
+# fatals on directories that contain ONLY custom resources it cannot map.
+# manifests/flux is Flux objects only and manifests/deploy/common is CRs
+# plus a Namespace; the per-cloud overlays carry the ServiceAccounts and
+# scheduling ConfigMaps kubescape can score.
+[lint-kustomize]
+hide = true
+dir = "{{config_root}}"
+env = { KUBESCAPE_SEVERITY = "{{vars.kubescape_severity}}" }
+run = """
+set -eu
+export KUBECONFIG=/nonexistent
+for d in manifests/deploy/aws/ manifests/deploy/google/; do
+  echo "lint-kustomize: kubescape scan $d"
+  kubescape scan "$d" --logger warning --severity-threshold "${KUBESCAPE_SEVERITY:-high}" --exceptions .kubescape/exceptions.json
+done
+"""
+
+# build is the python archetype's: `zensical build` of the docs site, so a
+# broken page (or a module README the site embeds going missing) fails the PR.
+[ci]
+description = "the checks the reusable CI workflow runs"
+run = [{ task = "lint" }, { task = "test" }, { task = "build" }]
+
+# common's pr is fmt + lint; this one adds the harness, the module tests and
+# the docs build. Like common's, it has no commit step.
+[pr]
+description = "full local gate before a pull request"
+run = [{ task = "fmt" }, { task = "lint" }, { task = "test" }, { task = "build" }]

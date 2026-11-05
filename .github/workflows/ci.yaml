@@ -1,0 +1,28 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# Continuous integration — thin caller for the org's reusable ci workflow (v7+:
+# installs the mise pins). It discovers the canonical tasks this repo defines and runs
+# `make lint` / `test` / `build` as one parallel job each: lint carries license
+# headers, prose, actionlint and the kustomize config scans; test is the
+# validation harness (kustomize build + cluster-vars substitution +
+# resourceset rendering + kubeconform) plus the terraform module test suites;
+# build renders the documentation site (zensical), so a broken page fails the
+# PR.
+#
+# The reusable workflow is pinned to a full commit SHA (tag in the comment) so a
+# moved tag can never change what runs; Renovate keeps the pin fresh.
+name: Continuous Integration
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+
+# the reusable workflow's jobs only need contents:read; grant just that ceiling
+permissions:
+    contents: read
+
+jobs:
+    ci:
+        uses: bitwise-media-group/github-workflows/.github/workflows/ci.yaml@08001c85620929f6fe58a83ecec5313536290ab1 # v8.1.0

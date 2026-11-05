@@ -1,0 +1,22 @@
+[
+  {
+    "name": "namespace-admission-posture",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["disable"],
+    "attributes": {
+      "reason": "C-0193/C-0202 assert cluster-wide admission posture (privileged / HostProcess containers) against bare Namespace manifests. The stack's own kyverno-policies component IS that admission control (verify-platform-signature), the github-arc namespace is labelled PSS privileged on purpose (the dind sidecar runs privileged, isolated on dedicated tainted capacity), and a Namespace object cannot itself satisfy the control."
+    },
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": {
+          "kind": "Namespace"
+        }
+      }
+    ],
+    "posturePolicies": [
+      { "controlID": "C-0193" },
+      { "controlID": "C-0202" }
+    ]
+  }
+]
