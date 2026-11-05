@@ -25,7 +25,21 @@ extra_css = ["stylesheets/extra.css"]
 
 nav = [
   { "Home" = "index.md" },
+  { "Getting started" = [
+    { "Overview" = "getting-started/index.md" },
+    { "Installing github-arc" = "getting-started/installing.md" },
+  ] },
+  { "How it works" = [
+    { "The seed contract" = "concepts/seed-contract.md" },
+    { "What the image deploys" = "concepts/deploys.md" },
+    { "Releases & channels" = "concepts/releases.md" },
+  ] },
+  { "Modules" = [
+    { "aws" = "reference/modules/aws.md" },
+    { "google" = "reference/modules/google.md" },
+  ] },
   { "Reference" = [
+    { "Variables & inputs" = "reference/variables.md" },
     { "Tasks & validation" = "reference/tasks.md" },
     { "Working on the docs" = "reference/docs.md" },
   ] },

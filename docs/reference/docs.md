@@ -32,5 +32,5 @@ the fenced-code rule, because admonition and tab bodies need indentation. `site/
 ## Publishing
 
 The release workflow's docs job builds the site at each release tag and deploys it to GitHub Pages at
-<https://oss.bitwisemedia.uk/github-arc-app-manifests/>. CI builds it on every pull request (`mise run build`), so a broken
-page fails the PR. Pages must be set to **Settings → Pages → Source → GitHub Actions**.
+<https://oss.bitwisemedia.uk/github-arc-app-manifests/>. CI builds it on every pull request (`mise run build`), so a
+broken page fails the PR. Pages must be set to **Settings → Pages → Source → GitHub Actions**.
