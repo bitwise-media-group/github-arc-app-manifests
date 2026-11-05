@@ -30,16 +30,28 @@ usage() {
 
 [[ -n "${REGISTRIES:-}" ]] || { echo "REGISTRIES must list at least one registry prefix" >&2; exit 2; }
 
+sign() { # sign <image@digest>; prints the transparency log index
+  local out
+  # cosign has no quiet flag, and keyless signing repeats its progress and
+  # the sigstore terms of use on every image: hold the output back, show it
+  # only when signing fails, and keep just the tlog index for forensics
+  if ! out="$(cosign sign --yes --use-signing-config=false "$1" 2>&1)"; then
+    printf '%s\n' "$out" >&2
+    return 1
+  fi
+  sed -n 's/^tlog entry created with index: //p' <<< "$out"
+}
+
 push() { # push <tag> <revision>
-  local tag="$1" revision="$2" registry digest
+  local tag="$1" revision="$2" registry digest index
   for registry in $REGISTRIES; do
     digest="$(flux push artifact "oci://${registry}/${IMAGE}:${tag}" \
       --path "$ROOT/manifests" \
       --source "${SOURCE_URL:-https://github.com/bitwise-media-group/github-arc-app-manifests}" \
       --revision "$revision" \
       --output json | jq -r .digest)"
-    cosign sign --yes --use-signing-config=false "${registry}/${IMAGE}@${digest}"
-    echo "pushed ${registry}/${IMAGE}:${tag} (${digest})"
+    index="$(sign "${registry}/${IMAGE}@${digest}")"
+    echo "pushed ${registry}/${IMAGE}:${tag} (${digest}${index:+, tlog ${index}})"
     if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
       echo "- \`${registry}/${IMAGE}:${tag}\` digest \`${digest}\`" >> "$GITHUB_STEP_SUMMARY"
     fi
@@ -47,18 +59,22 @@ push() { # push <tag> <revision>
 }
 
 tag() { # tag <from> <to>
-  local from="$1" to="$2" registry scratch
+  local from="$1" to="$2" registry dest
+  # global, not local: the EXIT trap fires after this function has returned
   scratch="$(mktemp -d "${TMPDIR:-/tmp}/publish.XXXXXX")"
+  trap 'rm -rf "$scratch"' EXIT
   for registry in $REGISTRIES; do
-    # sanity: the source tag must exist (and be pullable) before the channel moves
-    flux pull artifact "oci://${registry}/${IMAGE}:${from}" --output "$scratch/$from" > /dev/null
+    # sanity: the source tag must exist (and be pullable) before the channel
+    # moves; flux extracts into an existing directory only
+    dest="$scratch/$registry"
+    mkdir -p "$dest"
+    flux pull artifact "oci://${registry}/${IMAGE}:${from}" --output "$dest" > /dev/null
     flux tag artifact "oci://${registry}/${IMAGE}:${from}" --tag "$to"
     echo "tagged ${registry}/${IMAGE}:${from} as ${to}"
     if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
       echo "- \`${registry}/${IMAGE}:${from}\` -> \`${to}\`" >> "$GITHUB_STEP_SUMMARY"
     fi
   done
-  rm -rf "$scratch"
 }
 
 case "${1:-}" in
