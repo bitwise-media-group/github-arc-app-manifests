@@ -12,8 +12,11 @@
 #      publishes fails strict substitution
 #   3. render every ResourceSet with sample inputs (flux-operator CLI)
 #   4. kubeconform the results against Flux + flux-operator + CRD schemas
-# plus the seed-contract guard: the flux/ objects must carry exactly the
-# names, namespace and prune label the modules/application seed creates.
+# plus the seed-contract guard (the flux/ objects must carry exactly the
+# names, namespace and prune label the modules/application seed creates)
+# and the runner guard (every runner-pod image comes from the platform
+# mirror, and exactly the elected architectures render a scale set - and,
+# on aws, a NodePool).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -134,6 +137,31 @@ render_resourcesets() { # render_resourcesets <tree> <out-dir>
   done
 }
 
+# The runner guard. verify-platform-signature admits only mirrored images,
+# and the scale-set chart's own dind template would reach Docker Hub - so
+# every image the rendered scale sets name must sit under the platform
+# mirror. And the per-arch gate must hold: exactly the architectures whose
+# GITHUB_ARC_<ARCH>_ENABLED is "true" render a HelmRelease linux-<arch>
+# (plus, on aws, a NodePool github-arc-<arch>).
+check_runners() { # check_runners <tree> <out-dir>
+  local tree="$1" out="$2" rendered="$2/rendered-common-resourceset.yaml" arch want got images foreign
+  images="$(yq 'select(.kind == "HelmRelease") | .spec.values.template.spec | (.initContainers[], .containers[]) | .image' "$rendered" | grep -v '^---$' | sort -u)"
+  [[ -n "$images" ]] || { echo "runner guard: no runner images rendered in $rendered" >&2; exit 1; }
+  foreign="$(printf '%s\n' "$images" | grep -v "^${CONTAINER_REGISTRY}/images/" || true)"
+  [[ -z "$foreign" ]] || { echo "runner guard: runner images outside the platform mirror: $foreign" >&2; exit 1; }
+  want=""
+  for arch in amd64 arm64; do
+    local var; var="GITHUB_ARC_$(tr '[:lower:]' '[:upper:]' <<<"$arch")_ENABLED"
+    [[ "${!var}" == "true" ]] && want+="linux-$arch "
+  done
+  got="$(yq 'select(.kind == "HelmRelease") | .metadata.name' "$rendered" | grep -v '^---$' | sort | tr '\n' ' ')"
+  [[ "$got" == "$want" ]] || { echo "runner guard: elected scale sets '$want' but rendered '$got'" >&2; exit 1; }
+  if [[ "$tree" == "aws" ]]; then
+    got="$(yq 'select(.kind == "NodePool") | .metadata.name' "$out/rendered-aws-resourceset-nodes.yaml" | grep -v '^---$' | sort | tr '\n' ' ')"
+    [[ "$got" == "${want//linux-/github-arc-}" ]] || { echo "runner guard: elected node pools '${want//linux-/github-arc-}' but rendered '$got'" >&2; exit 1; }
+  fi
+}
+
 run_pass() { # run_pass <tree> <mode>
   local tree="$1" mode="$2" out
   out="$BUILD/$tree-$mode"
@@ -144,6 +172,7 @@ run_pass() { # run_pass <tree> <mode>
   check_seed_contract "$out/deploy.yaml"
   echo ">> [$tree/$mode] rendering resourcesets with sample inputs"
   render_resourcesets "$tree" "$out"
+  check_runners "$tree" "$out"
 }
 
 echo ">> null-guard self-test"
@@ -167,6 +196,10 @@ for tree in aws google; do
       if [[ "$mode" == "keyed" ]]; then
         # shellcheck disable=SC1090
         source "$ROOT/tests/$tree.keyed.env"
+        # the keyed passes double as the other side of the application's
+        # gates (single arch, a runner group) - see the fixture's header
+        # shellcheck disable=SC1091
+        source "$ROOT/tests/github-arc-vars.keyed.env"
       fi
       set +a
       run_pass "$tree" "$mode"

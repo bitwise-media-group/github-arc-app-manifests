@@ -1,0 +1,6 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The template reads no inputs (every gate and list is compared inline at
+# substitution time); the CLI still wants one input set to render with.
+- id: "1"
