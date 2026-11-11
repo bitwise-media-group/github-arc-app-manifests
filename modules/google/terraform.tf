@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 terraform {
-  required_version = ">= 1.11, < 2.0"
+  required_version = ">= 1.11, < 2"
 
   required_providers {
     # the floor terraform-google-gke-flux's modules/application carries and
@@ -10,11 +10,11 @@ terraform {
     # disagree
     google = {
       source  = "hashicorp/google"
-      version = ">= 7.46, < 8.10"
+      version = ">= 7.46, < 9"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 3.0"
+      version = ">= 3.0, < 4"
     }
   }
 }
