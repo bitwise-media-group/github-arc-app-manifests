@@ -2,30 +2,20 @@
 # SPDX-License-Identifier: MIT
 #
 # Repo-local tasks, included after the toolchain's common tasks and the
-# python archetype: the manifests validation harness and the terraform module
-# test suites. The archetype is here only for the documentation site
-# (zensical.toml + docs/): it supplies sync, docs-build, serve and build
-# (`zensical build` via uv). lint is common's (license headers, prose,
+# containers archetype: the manifests validation harness and the terraform
+# module test suites. lint is the archetype's (license headers, prose,
 # actionlint + zizmor, shell, and the kustomize config scans through the
-# lint-kustomize replacement below), restated so the archetype's ruff pass
-# stays out; fmt is common's plus terraform fmt.
-
-# Included after the python archetype, so this lint replaces its whole task:
-# it repeats common's rollup and nothing more (there is no python to ruff).
-[lint]
-description = "prose lint + license, container, shell and workflow checks"
-run = [
-  { task = "license-check" },
-  { task = "lint-containers" },
-  { task = "lint-shell" },
-  { task = "lint-workflows" },
-  { task = "lint-prose" },
-]
+# lint-kustomize replacement below); fmt is common's plus terraform fmt. The
+# archetype's build (`patchy build --all --dry-run`) packages the manifests
+# artifact patchy.yaml describes without publishing it, and common's
+# docs-build builds the documentation site (zensical.toml + docs/).
 
 [test]
 description = "render + schema-validate the manifests, then terraform test the modules"
 run = [{ task = "test-manifests" }, { task = "test-modules" }]
 
+# The harness renders through the archetype's Flux helpers
+# (.mise/archetypes/containers/scripts/flux-substitute.sh and kubeconform.sh).
 [test-manifests]
 description = "kustomize build, cluster-vars + github-arc-vars substitution, resourceset render, kubeconform"
 dir = "{{config_root}}"
@@ -74,14 +64,19 @@ for d in manifests/deploy/aws/ manifests/deploy/google/; do
 done
 """
 
-# build is the python archetype's: `zensical build` of the docs site, so a
-# broken page (or a module README the site embeds going missing) fails the PR.
+# The archetype's ci and pr, with the harness and module tests added: the
+# reusable CI runs lint, test and build as jobs of their own.
 [ci]
 description = "the checks the reusable CI workflow runs"
-run = [{ task = "lint" }, { task = "test" }, { task = "build" }]
+run = [{ task = "lint" }, { task = "test" }, { task = "build" }, { task = "docs-build" }]
 
-# common's pr is fmt + lint; this one adds the harness, the module tests and
-# the docs build. Like common's, it has no commit step.
 [pr]
 description = "full local gate before a pull request"
-run = [{ task = "fmt" }, { task = "lint" }, { task = "test" }, { task = "build" }]
+run = [
+  { task = "fmt" },
+  { task = "lint" },
+  { task = "test" },
+  { task = "build" },
+  { task = "docs-build" },
+  { task = "commit" },
+]

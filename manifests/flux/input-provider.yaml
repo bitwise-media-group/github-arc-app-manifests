@@ -29,9 +29,9 @@ spec:
   type: ${ARTIFACT_TAG_PROVIDER:=GARArtifactTag}
   url: oci://${PLATFORM_REGISTRY}/manifests/github-arc
   filter:
-    # Version tags only (X.Y.Z); the channel tags never match a semver
-    # range, so a cluster follows releases within the range and a human
-    # moves the range, not the tag. Constraint order matters: kustomize
+    # Releases only (vX.Y.Z); edge builds are pre-releases, which a plain
+    # range never admits, so a cluster follows releases within the range and
+    # a human moves the range, not the tag. Constraint order matters: kustomize
     # drops the quotes, so the default must not start with '>' or YAML reads
     # it as a folded block scalar. A range matching NO tag empties the
     # ResourceSet, which prunes github-arc - keep the floor honest.

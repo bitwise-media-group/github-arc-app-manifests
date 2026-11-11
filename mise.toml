@@ -3,30 +3,17 @@
 #
 # github-arc-app-manifests consumes the shared toolchain
 # (bitwise-media-group/toolchain) as the .mise/ submodule: mise loads its
-# config.toml natively as .mise/config.toml (pinned tools -- terraform,
-# kubescape, shellcheck, actionlint, zizmor, prettier, markdownlint,
-# addlicense, ... -- and the [vars] knob defaults), and this file selects the
-# task files and pins the validation-only tools below. The repo has nothing to
-# compile; the python archetype rides on top of common only because the repo
-# also carries its documentation site (zensical.toml + docs/, built with
-# Zensical via uv), and the Makefile is a thin forwarder
-# (.mise/archetypes/python/include.mk). The validation task surface lives in
-# tasks.toml.
+# config.toml natively as .mise/config.toml (the pinned tools and the [vars]
+# knob defaults), and this file selects the task files. The containers
+# archetype publishes the manifests image with `patchy build` (patchy.yaml)
+# and pins everything the validation harness needs — kustomize, kubeconform,
+# yq, flux-operator, kubescape, terraform — as shared pins, so this repo pins
+# nothing of its own. tasks.toml adds the harness and the module tests; the
+# Makefile is a thin forwarder (.mise/archetypes/containers/include.mk).
 
 [task_config]
-# common (prose fmt/lint + license, container, shell and workflow lint), then
-# the python archetype (docs site: sync, docs-build, serve, build), then the
-# repo-local validation tasks; tasks.toml is included LAST so its same-named
-# tasks (fmt, lint, test, lint-kustomize, ci, pr) win over both.
-includes = [".mise/common/tasks.toml", ".mise/archetypes/python/tasks.toml", "tasks.toml"]
-
-[tools]
-# Validation tools the toolchain does not pin (the same set flux-manifests
-# pins; locked in this repo's own mise.lock - never run a repo-wide
-# `mise upgrade`, it would write into the submodule). terraform, for the
-# modules' plan-time test suites, is the toolchain's shared pin.
-"aqua:kubernetes-sigs/kustomize" = "5.7.1"
-"aqua:yannh/kubeconform" = "0.8.0"
-"aqua:mikefarah/yq" = "4.54.2"
-# renders ResourceSets with sample inputs (`flux-operator build resourceset`)
-"github:controlplaneio-fluxcd/flux-operator" = "v0.62.1"
+# common (prose fmt/lint + license, container, shell and workflow lint, the
+# docs site), then the containers archetype (build, publish, the rollups),
+# then the repo-local tasks; tasks.toml is included LAST so its same-named
+# tasks (lint-kustomize, fmt, test, ci, pr) win over both.
+includes = [".mise/common/tasks.toml", ".mise/archetypes/containers/tasks.toml", "tasks.toml"]

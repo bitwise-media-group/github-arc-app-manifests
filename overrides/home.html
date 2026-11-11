@@ -115,7 +115,7 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
                         <div class="pam-run"><span class="t">render</span><span class="d">every ResourceSet with sample inputs</span><span class="ok">✓</span></div>
                         <div class="pam-run"><span class="t">schema</span><span class="d">kubeconform · Flux + vendored CRDs</span><span class="ok">✓</span></div>
                         <div class="pam-run"><span class="t">tf</span><span class="d">terraform test · aws · google</span><span class="ok">✓</span></div>
-                        <div class="pam-pane__sep pam-ok">→ release, and publish.yaml signs it keylessly</div>
+                        <div class="pam-pane__sep pam-ok">→ merge, and release.yaml signs it keylessly</div>
                     </div>
                 </div>
             </div>
@@ -362,7 +362,7 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
                 <div class="pam-step__body">
                     <div class="pam-step__num">03</div>
                     <h3>Release</h3>
-                    <p>release-please cuts <code>vX.Y.Z</code>; publish.yaml pushes and signs it, and every cluster
+                    <p>release-please cuts <code>vX.Y.Z</code>, promoting the newest edge build, and every cluster
                         whose range admits it picks it up.</p>
                     <a class="pam-step__alt" href="{{ 'concepts/releases/' | url }}">Releases &amp; channels
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"

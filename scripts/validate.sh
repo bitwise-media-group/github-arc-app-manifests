@@ -9,18 +9,20 @@
 #      Kustomization does (postBuild.substituteFrom), faithfully to the
 #      controller's roundtrip - so an empty var that would become null on a
 #      cluster becomes null (and fails) here, and a var neither ConfigMap
-#      publishes fails strict substitution
+#      publishes fails strict substitution (the toolchain's
+#      flux-substitute.sh)
 #   3. render every ResourceSet with sample inputs (flux-operator CLI)
 #   4. kubeconform the results against Flux + flux-operator + CRD schemas
-# plus the seed-contract guard (the flux/ objects must carry exactly the
-# names, namespace and prune label the modules/application seed creates)
-# and the runner guard (every runner-pod image comes from the platform
-# mirror, and exactly the elected architectures render a scale set - and,
-# on aws, a NodePool).
+#      (the toolchain's kubeconform.sh)
+# plus the seed-contract guard: the flux/ objects must carry exactly the
+# names, namespace and prune label the modules/application seed creates.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/.build"
+# The containers archetype's Flux helpers: postBuild substitution with the
+# strict check and null guard, and kubeconform with the house schema catalog.
+HELPERS="$ROOT/.mise/archetypes/containers/scripts"
 rm -rf "$BUILD" && mkdir -p "$BUILD"
 
 command -v kustomize >/dev/null || { echo "kustomize not found" >&2; exit 1; }
@@ -28,71 +30,15 @@ command -v kubeconform >/dev/null || { echo "kubeconform not found" >&2; exit 1;
 command -v flux-operator >/dev/null || { echo "flux-operator CLI not found" >&2; exit 1; }
 command -v yq >/dev/null || { echo "yq not found" >&2; exit 1; }
 
-# kustomize-controller substitutes in STRICT mode: a bare ${VAR} fails the
-# whole Kustomization on any cluster whose ConfigMaps never publish VAR (a
-# ${VAR:=default} never does). Mirror that here so each tree's pass, run
-# under only that cloud's env plus github-arc-vars, fails the way the cluster
-# would.
-check_strict() { # check_strict <in-file>
-  local var
-  # shellcheck disable=SC2016 # the dollar-brace is the grep pattern, not an expansion
-  while IFS= read -r var; do
-    [[ -n "${!var+x}" ]] || { echo "strict substitution: \${$var} in $1 but $var is not set in the env" >&2; exit 1; }
-  done < <(grep -oE '\$\{[A-Z][A-Z0-9_]*\}' "$1" | tr -d '${}' | sort -u)
-}
-
-# After substitution, no path that held a ${VAR}-bearing string may hold
-# null: that is exactly the cluster failure mode where the controller's
-# roundtrip strips redundant quotes and an empty value re-parses as null.
-null_guard() { # null_guard <pre-file> <post-file>
-  local pre nulls hits
-  # shellcheck disable=SC2016 # yq expressions, not shell expansions
-  pre="$(yq ea '.. | select(tag == "!!str") | select(test("\$\{[A-Z]")) | ([document_index] + path | join("/"))' "$1" | sort -u)"
-  nulls="$(yq ea '.. | select(tag == "!!null") | ([document_index] + path | join("/"))' "$2" | sort -u)"
-  hits="$(comm -12 <(printf '%s\n' "$pre") <(printf '%s\n' "$nulls") | grep -v '^$' || true)"
-  if [[ -n "$hits" ]]; then
-    {
-      echo "null substitution in $2 - these \${VAR}-bearing scalars became null (doc/path):"
-      printf '%s\n' "$hits" | sed 's/^/  /'
-      echo "gate the key absent, use << \"\${VAR:=}\" | quote >>, or move it into a resourcesTemplate block"
-    } >&2
-    exit 1
-  fi
-}
-
-# Substitute vars the way kustomize-controller's postBuild does: parse,
-# re-serialize (redundant quotes drop), TEXTUALLY envsubst, re-parse. yq's
-# envsubst also eats bare $VAR (dex's $-refs, Go template $variables) where
-# the controller only substitutes the braced form - shield those behind a
-# sentinel so the render matches the cluster.
+# Substitute vars the way kustomize-controller's postBuild does on a real
+# cluster: strict (a bare ${VAR} that neither ConfigMap publishes fails, as it
+# would fail the Kustomization), through the controller's
+# parse/re-serialize/substitute/re-parse round trip, then the null guard (no
+# ${VAR}-bearing scalar may substitute to null -- gate the key absent, use
+# << "${VAR:=}" | quote >>, or move it into a resourcesTemplate block). Each
+# tree's pass runs under only that cloud's env plus github-arc-vars.
 substitute() { # substitute <in-file> <out-file>
-  check_strict "$1"
-  # shellcheck disable=SC2016 # yq expression
-  yq ea '(.. | select(kind == "scalar")) style=""' "$1" > "$2.norm"
-  # shellcheck disable=SC2016 # ${1} and $$ are yq syntax; single quotes are deliberate
-  IN_FILE="$2.norm" yq -n 'load_str(strenv(IN_FILE)) | sub("\$([^{])"; "@BARE_DOLLAR@${1}") | envsubst | sub("@BARE_DOLLAR@"; "$$")' > "$2"
-  null_guard "$2.norm" "$2"
-  rm -f "$2.norm"
-}
-
-null_guard_selftest() {
-  local dir="$BUILD/selftest"
-  mkdir -p "$dir"
-  cat > "$dir/canary.yaml" <<'YAML'
-canary:
-  trip: "${VALIDATE_SELFTEST_EMPTY}"
-  control: "${VALIDATE_SELFTEST_PRESENT}"
-YAML
-  export VALIDATE_SELFTEST_EMPTY="" VALIDATE_SELFTEST_PRESENT="present"
-  if (substitute "$dir/canary.yaml" "$dir/canary.out.yaml") 2> /dev/null; then
-    echo "self-test: null_guard did NOT trip on an empty-var quoted scalar - the guard has rotted, aborting" >&2
-    exit 1
-  fi
-  export VALIDATE_SELFTEST_EMPTY="non-empty"
-  substitute "$dir/canary.yaml" "$dir/canary.out.yaml" \
-    || { echo "self-test: substitute failed its positive control" >&2; exit 1; }
-  unset VALIDATE_SELFTEST_EMPTY VALIDATE_SELFTEST_PRESENT
-  rm -rf "$dir"
+  "$HELPERS/flux-substitute.sh" "$1" "$2"
 }
 
 # The seed contract: modules/application creates a ResourceSetInputProvider
@@ -175,8 +121,10 @@ run_pass() { # run_pass <tree> <mode>
   check_runners "$tree" "$out"
 }
 
+# The null guard is the regression fence for a bug class local rendering
+# used to hide; prove it still fires before trusting a green run.
 echo ">> null-guard self-test"
-null_guard_selftest
+"$HELPERS/flux-substitute.sh" --self-test
 
 for tree in aws google; do
   for mode in keyless keyed; do
@@ -210,10 +158,8 @@ done
 echo ">> kubeconform"
 # CRD schemas are vendored under tests/schemas (converted from upstream CRDs);
 # refresh with: curl <crd-yaml> | yq -o=json '.spec.versions[0].schema.openAPIV3Schema'
-kubeconform -strict -summary \
-  -schema-location default \
-  -schema-location "https://raw.githubusercontent.com/fluxcd-community/flux2-schemas/main/{{ .ResourceKind }}{{ .KindSuffix }}.json" \
-  -schema-location "$ROOT/tests/schemas/{{ .ResourceKind }}-{{ .Group }}-{{ .ResourceAPIVersion }}.json" \
+# Nothing is skipped (KUBECONFORM_SKIP empty): this image ships no CRDs.
+KUBECONFORM_SCHEMAS="$ROOT/tests/schemas" KUBECONFORM_SKIP="" "$HELPERS/kubeconform.sh" \
   "$BUILD"/*/deploy.yaml "$BUILD"/*/rendered-*.yaml
 
 echo ">> validation clean"

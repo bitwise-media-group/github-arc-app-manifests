@@ -4,9 +4,10 @@
 # Release pipeline — thin caller for the org's reusable release workflow.
 # release-please watches main and keeps a release PR current from the
 # Conventional Commit history; when that PR merges the workflow cuts the GitHub
-# release + vX.Y.Z tag. There is no .goreleaser.yaml here — the release event
-# triggers publish.yaml, which pushes the signed OCI artifact to the platform
-# registry and moves the staging channel tag. The reusable workflow's docs job
+# release + vX.Y.Z tag. There is no .goreleaser.yaml here: the publish job
+# after it runs the patchy-publish action, which publishes every push that cuts
+# no release as an immutable edge build of manifests/github-arc and promotes the
+# newest edge build to vX.Y.Z when a release is cut. The reusable workflow's docs job
 # sees zensical.toml and publishes the documentation site, built at the release
 # tag, to GitHub Pages (oss.bitwisemedia.uk/github-arc-app-manifests/; needs
 # Settings -> Pages -> Source -> GitHub Actions).
@@ -31,7 +32,7 @@ permissions: {}
 
 jobs:
     release:
-        uses: bitwise-media-group/github-workflows/.github/workflows/release.yaml@35d8e9a1ce772f67f97e73484dc5b7a50c29e0f3 # v8.1.1
+        uses: bitwise-media-group/github-workflows/.github/workflows/release.yaml@e4f48161b429020844ca246bb598b34ac2d330fd # v8.2.0
         # ceiling for the reusable workflow's release-please job. GitHub resolves
         # a reusable workflow's permissions as the union of every job and ignores
         # `if:`, so the caller grants the goreleaser job's ceiling even though it
@@ -61,3 +62,40 @@ jobs:
         secrets:
             # private key for the App that authors the release PR (same App as /merge)
             app-private-key: ${{ secrets.FF_MERGE_PRIVATE_KEY }}
+
+    # The manifests image (patchy.yaml), in this repository's own job: a
+    # composite action keeps the job's identity, so the image is signed as
+    # .../github-arc-app-manifests/.github/workflows/release.yaml@refs/heads/main,
+    # the identity clusters verify (SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS). Registries
+    # and signing come from org variables (GOOGLE_MANIFEST_PUBLISHER_SA is this
+    # repository's own); nothing about them is committed.
+    publish:
+        needs: release
+        runs-on: ubuntu-latest
+        # one publish at a time, in push order: an edge build never lands
+        # after the promotion of a release cut from a later commit
+        concurrency:
+            group: patchy-publish
+            cancel-in-progress: false
+        permissions:
+            # check out the source to build
+            contents: read
+            # the GCP login and keyless signing ride the job's OIDC token
+            id-token: write
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+                  submodules: true # the toolchain at .mise/ pins patchy and cosign
+
+            - uses: bitwise-media-group/github-workflows/.github/actions/patchy-publish@e4f48161b429020844ca246bb598b34ac2d330fd # v8.2.0
+              with:
+                  mode: ${{ needs.release.outputs.release_created == 'true' && 'promote' || 'edge' }}
+                  version: ${{ needs.release.outputs.release_created == 'true' && needs.release.outputs.version || '' }}
+                  google-registry: ${{ vars.GOOGLE_PLATFORM_REGISTRY }}
+                  google-workload-identity-provider: ${{ vars.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}
+                  google-service-account: ${{ vars.GOOGLE_MANIFEST_PUBLISHER_SA }}
+                  aws-registry: ${{ vars.AWS_PLATFORM_REGISTRY }}
+                  aws-role: ${{ vars.AWS_MANIFEST_PUBLISHER_ROLE }}
+                  aws-region: ${{ vars.AWS_REGION }}
+                  signing-kms-key: ${{ vars.SIGNING_KMS_KEY }}

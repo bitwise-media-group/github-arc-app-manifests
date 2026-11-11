@@ -12,7 +12,8 @@
 # cluster modules' modules/application.
 #
 # Everything lives in mise tasks: the shared toolchain submodule at .mise/
-# provides the pinned tools + the common lint contract (selected in the root
-# mise.toml), and tasks.toml carries the validation surface. This Makefile is
-# only the thin forwarding shim - `make <task>` == `mise run <task>`.
-include .mise/archetypes/python/include.mk
+# provides the pinned tools, the common lint contract and the containers
+# archetype's build and publish tasks (selected in the root mise.toml), and
+# tasks.toml carries the validation surface. This Makefile is only the thin
+# forwarding shim - `make <task>` == `mise run <task>`.
+include .mise/archetypes/containers/include.mk

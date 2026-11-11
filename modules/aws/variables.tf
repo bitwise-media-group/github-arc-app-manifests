@@ -171,13 +171,13 @@ variable "manifests_semver" {
 variable "signed_identity_subject" {
   description = <<-EOT
     Fulcio certificate-subject regexp (keyless cosign) of the workflow that signs this application's manifests image -
-    this repo's publish.yaml at a release tag by default. Published as SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS and used as
-    the seed's verify subject. Ignored on KMS-keyed clusters (cluster.keyed), which verify against the signing key's
+    this repo's release.yaml on main by default, which signs edge builds and (by promotion) every release. Published as
+    SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS and used as the seed's verify subject. Ignored on KMS-keyed clusters (cluster.keyed), which verify against the signing key's
     public half instead.
   EOT
   type        = string
   nullable    = false
-  default     = "^https://github\\.com/bitwise-media-group/github-arc-app-manifests/\\.github/workflows/publish\\.yaml@refs/tags/v.+$"
+  default     = "^https://github\\.com/bitwise-media-group/github-arc-app-manifests/\\.github/workflows/release\\.yaml@refs/heads/main$"
 }
 
 variable "extra_vars" {

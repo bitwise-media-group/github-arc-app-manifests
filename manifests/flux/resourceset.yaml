@@ -54,7 +54,7 @@ spec:
           # single-quoted: regexes whose backslashes a double-quoted scalar
           # would mangle when the rendered template text is parsed
           - issuer: '${SIGNED_IDENTITY_ISSUER:=^https://token\.actions\.githubusercontent\.com$}'
-            subject: '${SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS:=^https://github\.com/bitwise-media-group/github-arc-app-manifests/\.github/workflows/publish\.yaml@refs/tags/v.+$}'
+            subject: '${SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS:=^https://github\.com/bitwise-media-group/github-arc-app-manifests/\.github/workflows/release\.yaml@refs/heads/main$}'
         << end >>
     ---
     apiVersion: kustomize.toolkit.fluxcd.io/v1

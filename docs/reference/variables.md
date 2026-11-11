@@ -7,16 +7,16 @@ not, and `make test` substitutes strictly, so a manifest reaching for a key the 
 
 ## `github-arc-vars`
 
-| Key                                    | Module input                 | Default                                 | Read by                           |
-| -------------------------------------- | ---------------------------- | --------------------------------------- | --------------------------------- |
-| `GITHUB_ARC_CONFIG_URL`                | `github.config_url`          | (required)                              | both scale sets                   |
-| `GITHUB_ARC_RUNNER_GROUP`              | `github.runner_group`        | `""` (the Default group)                | both scale sets, when non-empty   |
-| `GITHUB_ARC_<ARCH>_ENABLED`            | `runners.<arch>.enabled`     | `"true"` (`"false"` for an absent key)  | the arch's scale set (+ NodePool) |
-| `GITHUB_ARC_<ARCH>_MAX_RUNNERS`        | `runners.<arch>.max_runners` | `4`                                     | `maxRunners`                      |
-| `GITHUB_ARC_<ARCH>_CPU`                | `runners.<arch>.cpu`         | `3`                                     | the runner's CPU request          |
-| `GITHUB_ARC_<ARCH>_MEMORY`             | `runners.<arch>.memory`      | `10Gi`                                  | the runner's memory request       |
-| `GITHUB_ARC_MANIFESTS_SEMVER`          | `manifests_semver`           | `<1.0.0 >=0.1.0`                        | the image's own input provider    |
-| `SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS` | `signed_identity_subject`    | this repo's `publish.yaml@refs/tags/v*` | the image's own verify block      |
+| Key                                    | Module input                 | Default                                    | Read by                           |
+| -------------------------------------- | ---------------------------- | ------------------------------------------ | --------------------------------- |
+| `GITHUB_ARC_CONFIG_URL`                | `github.config_url`          | (required)                                 | both scale sets                   |
+| `GITHUB_ARC_RUNNER_GROUP`              | `github.runner_group`        | `""` (the Default group)                   | both scale sets, when non-empty   |
+| `GITHUB_ARC_<ARCH>_ENABLED`            | `runners.<arch>.enabled`     | `"true"` (`"false"` for an absent key)     | the arch's scale set (+ NodePool) |
+| `GITHUB_ARC_<ARCH>_MAX_RUNNERS`        | `runners.<arch>.max_runners` | `4`                                        | `maxRunners`                      |
+| `GITHUB_ARC_<ARCH>_CPU`                | `runners.<arch>.cpu`         | `3`                                        | the runner's CPU request          |
+| `GITHUB_ARC_<ARCH>_MEMORY`             | `runners.<arch>.memory`      | `10Gi`                                     | the runner's memory request       |
+| `GITHUB_ARC_MANIFESTS_SEMVER`          | `manifests_semver`           | `<1.0.0 >=0.1.0`                           | the image's own input provider    |
+| `SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS` | `signed_identity_subject`    | this repo's `release.yaml@refs/heads/main` | the image's own verify block      |
 
 aws only (`modules/aws`), read by `deploy/aws/resourceset-nodes.yaml`:
 

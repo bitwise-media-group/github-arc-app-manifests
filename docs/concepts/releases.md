@@ -1,49 +1,54 @@
 # Releases & channels
 
-Clusters follow **version tags** through the seed's semver range (`GITHUB_ARC_MANIFESTS_SEMVER`). The channel tags exist
-for humans, for `flux pull artifact`, and for the platform's own smoke tests.
+Every tag is immutable. Clusters follow **releases** through the seed's semver range (`GITHUB_ARC_MANIFESTS_SEMVER`);
+edge builds exist for development clusters, `flux pull artifact`, and the platform's own smoke tests.
 
-| Workflow            | Trigger                          | Pushes                                         | Then                                  |
-| ------------------- | -------------------------------- | ---------------------------------------------- | ------------------------------------- |
-| `release.yaml`      | push to `main`                   | release-please keeps a release PR current      | cuts `vX.Y.Z` when that PR merges     |
-| `publish.yaml`      | the release                      | `manifests/github-arc:X.Y.Z` to every registry | signs each digest, moves `staging`    |
-| `publish-edge.yaml` | every merge to `main`            | `manifests/github-arc:edge-next`               | signs, then moves `edge`              |
-| `promote.yaml`      | manual, `production` environment | nothing new                                    | moves `stable` to a published version |
+| The release workflow's push… | The publish job                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| cuts no release              | builds `manifests/` and pushes it as `manifests/github-arc:<next version>-edge.<yyyymmddhhmmss>.g<commit>`, signed |
+| cuts `vX.Y.Z`                | adds `vX.Y.Z` to the newest `X.Y.Z-edge.*` build, without rebuilding                                               |
 
 ```mermaid
 flowchart LR
-  main["merge to main"] --> edge["edge-next → signed → edge"]
-  main --> rp["release-please PR"] --> tag["vX.Y.Z"]
-  tag --> pub["X.Y.Z pushed + signed"] --> staging["staging"]
-  staging -- "soaked, approved" --> stable["stable"]
-  pub -. "semver range admits it" .-> clusters["clusters"]
+  main["merge to main"] --> edge["X.Y.Z-edge.&lt;ts&gt;.g&lt;commit&gt;<br/>built + signed"]
+  main --> rp["release-please PR"] --> tag["vX.Y.Z cut"]
+  edge -- "promoted, not rebuilt" --> stable["vX.Y.Z"]
+  tag --> stable
+  stable -. "semver range admits it" .-> clusters["clusters"]
 ```
 
-The `edge` image is pushed as `edge-next`, signed, and only then retagged `edge`, so the channel never points at an
-unsigned digest. Promotion moves the channel only: the image and its signature are untouched, because verification
-follows the digest.
+An edge build is based on the **next** version, the open release PR's, so the order is consistent: `0.1.0` <
+`0.2.0-edge.*` < `0.2.0`. Edge builds are pre-releases, so a plain range such as the default `<1.0.0 >=0.1.0` never
+admits one. Before promoting, the release workflow checks that the newest edge build was built from a commit with the
+release commit's `manifests/` tree, so a release is exactly what edge clusters ran.
+
+Publishing is the release workflow's `publish` job, which runs github-workflows'
+[`patchy-publish`](https://oss.bitwisemedia.uk/github-workflows/actions/patchy-publish/) action after release-please.
+`patchy.yaml` holds only the `build:` block; `make build` packages the image without publishing it.
 
 ## Signing
 
-Signing is keyless. The Fulcio certificate subject is the calling workflow at its ref, which is what the seed's
-`OCIRepository` verify block (`SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS`) matches on every cluster:
+Signing is keyless. The Fulcio certificate subject is this repository's release workflow on `main`, which is what the
+seed's `OCIRepository` verify block (`SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS`) matches on every cluster:
 
-- releases are signed as `…/github-arc-app-manifests/.github/workflows/publish.yaml@refs/tags/v*`;
-- edge images are signed as `…/github-arc-app-manifests/.github/workflows/publish-edge.yaml@refs/heads/main`, a distinct
-  identity.
+```text
+https://github.com/bitwise-media-group/github-arc-app-manifests/.github/workflows/release.yaml@refs/heads/main
+```
 
-cosign v3 stores the signature as a sigstore bundle through the OCI referrers API.
+Edge builds and releases carry the same signature, because a release is a promoted edge build. cosign v3 stores the
+signature as a sigstore bundle through the OCI referrers API. Setting the `SIGNING_KMS_KEY` org variable switches
+signing to a KMS key.
 
 ## Registries
 
-One job publishes to both registries; `scripts/publish.sh` does the pushing, signing and retagging.
+The registries come from org variables and are never committed; the publish job masks their URLs in its logs.
 
-- **GAR**: org variables `PLATFORM_REGISTRY`, `GCP_WIF_PROVIDER` and `GCP_MANIFEST_PUBLISHER_SA`. The service account is
-  this repository's own publisher, set as a repository variable that shadows the org one. Authentication is Workload
-  Identity Federation.
-- **ECR**: org variables `AWS_MANIFEST_PUBLISHER_ROLE`, `AWS_PLATFORM_REGISTRY` and `AWS_REGION`. The role is the
-  artifact-store module's `manifest_publishers["github-arc-app-manifests"]`, path-scoped to `manifests/github-arc` so
-  this repository can never overwrite the platform. The ECR half is skipped when `AWS_MANIFEST_PUBLISHER_ROLE` is unset.
+- **GAR**: `GOOGLE_PLATFORM_REGISTRY`, `GOOGLE_WORKLOAD_IDENTITY_PROVIDER` and `GOOGLE_MANIFEST_PUBLISHER_SA`. The
+  service account is this repository's own publisher, set as a repository variable that shadows the org one.
+  Authentication is Workload Identity Federation.
+- **ECR**: `AWS_PLATFORM_REGISTRY`, `AWS_MANIFEST_PUBLISHER_ROLE` and `AWS_REGION`. The role is the artifact-store
+  module's `manifest_publishers["github-arc-app-manifests"]`, path-scoped to `manifests/github-arc` so this repository
+  can never overwrite the platform. ECR is skipped while `AWS_PLATFORM_REGISTRY` is unset.
 
 ## This site
 

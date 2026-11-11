@@ -1,22 +1,23 @@
 # Tasks & validation
 
 Every verb is a [mise](https://mise.jdx.dev) task. The shared [toolchain](https://oss.bitwisemedia.uk/toolchain/),
-mounted at `.mise/`, provides the pinned tools and the common lint contract, the python archetype adds the docs-site
-tasks, and the repository's `tasks.toml` carries the validation surface. The `Makefile` only forwards: `make <task>` is
-`mise run <task>`.
+mounted at `.mise/`, provides the pinned tools, the common lint contract and the docs-site tasks, the containers
+archetype adds the image build, and the repository's `tasks.toml` carries the validation surface. The `Makefile` only
+forwards: `make <task>` is `mise run <task>`.
 
-| Task                  | What it does                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `make test`           | `test-manifests`, then `test-modules`                                                      |
-| `make test-manifests` | the render + schema harness, `scripts/validate.sh`                                         |
-| `make test-modules`   | `terraform init` + `validate` + `test` (mocked providers) in each module                   |
-| `make lint`           | license headers, prose, shell, actionlint + zizmor, and kubescape over the per-cloud trees |
-| `make fmt`            | prose format, `terraform fmt`, license headers                                             |
-| `make build`          | `zensical build` of this site into `site/`                                                 |
-| `make serve`          | this site on <http://localhost:8006>, with live reload                                     |
-| `make ci`             | `lint`, `test` and `build`: what the reusable CI workflow runs                             |
-| `make pr`             | `fmt`, `lint`, `test` and `build`: the full local gate before a pull request               |
-| `make help`           | every task                                                                                 |
+| Task                  | What it does                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| `make test`           | `test-manifests`, then `test-modules`                                                               |
+| `make test-manifests` | the render + schema harness, `scripts/validate.sh`                                                  |
+| `make test-modules`   | `terraform init` + `validate` + `test` (mocked providers) in each module                            |
+| `make lint`           | license headers, prose, shell, actionlint + zizmor, and kubescape over the per-cloud trees          |
+| `make fmt`            | prose format, `terraform fmt`, license headers                                                      |
+| `make build`          | `patchy build --all --dry-run`: packages the manifests image (`patchy.yaml`), publishes nothing     |
+| `make docs-build`     | `zensical build` of this site into `site/`                                                          |
+| `make serve`          | this site on <http://localhost:8006>, with live reload                                              |
+| `make ci`             | `lint`, `test`, `build` and `docs-build`: what the reusable CI workflow runs                        |
+| `make pr`             | `fmt`, `lint`, `test`, `build` and `docs-build`, then `./commit.sh` if present: the full local gate |
+| `make help`           | every task                                                                                          |
 
 ## The render harness
 

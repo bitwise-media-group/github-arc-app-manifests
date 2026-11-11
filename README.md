@@ -94,9 +94,11 @@ inputs][variables].
 
 ## Releases
 
-release-please cuts `vX.Y.Z`; `publish.yaml` pushes `manifests/` as `manifests/github-arc:X.Y.Z` to every configured
-platform registry, signs each digest keylessly and moves `staging`; `promote.yaml` moves `stable`; `publish-edge.yaml`
-publishes `edge` from every merge to `main`. Clusters follow version tags through `GITHUB_ARC_MANIFESTS_SEMVER`.
+Every push to main that cuts no release publishes `manifests/` as an immutable
+`manifests/github-arc:<next version>-edge.<timestamp>.g<commit>` build; merging the release PR cuts `vX.Y.Z` and adds
+that tag to the newest edge build of the version, without rebuilding. Both run in `release.yaml`'s publish job
+(github-workflows' `patchy-publish` action), signed keylessly as this repository's release workflow on `main`. Clusters
+follow **releases** through `GITHUB_ARC_MANIFESTS_SEMVER`; edge builds are pre-releases outside any plain range.
 
 ## Developing
 

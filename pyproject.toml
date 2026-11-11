@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 # The github-arc-app-manifests documentation site (Zensical via uv). Not a Python
-# package: no [build-system], so the python archetype's build runs only
-# `zensical build`.
+# package: no [build-system]; the toolchain's docs-build task runs
+# `zensical build` through uv.
 [project]
 name = "github-arc-app-manifests-docs"
 version = "0.1.0"

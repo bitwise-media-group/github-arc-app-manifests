@@ -1,0 +1,33 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# patchy's configuration for this repo: `patchy build` packages manifests/ as
+# the github-arc application's Flux OCI artifact. Only the build block lives here.
+# The registries and the signing config are never committed: the release
+# workflow's patchy-publish step (bitwise-media-group/github-workflows) writes
+# them from org variables as a lower config layer, and `make build`
+# (`patchy build --all --dry-run`) needs neither.
+
+scan:
+  # The artifact is unrendered kustomize, not an image; configuration scanning
+  # runs over the rendered per-cloud overlays in lint-kustomize instead.
+  enabled: false
+
+build:
+  # Every tag is immutable:
+  #   edge    <next version>-edge.<UTC yyyymmddhhmmss>.g<short commit>, every
+  #           push to main that cuts no release (the next version is the open
+  #           release pull request's)
+  #   stable  vX.Y.Z, added to the newest X.Y.Z edge build when the release is
+  #           cut (patchy build promote), never rebuilt
+  # The seed's semver range (GITHUB_ARC_MANIFESTS_SEMVER) follows vX.Y.Z; edge
+  # builds are pre-releases, outside any plain range.
+  tags:
+    - "${VERSION}-edge.${PATCHY_TIMESTAMP}.g${GIT_COMMIT:0:7}"
+    - "sha-${GIT_COMMIT}"
+  manifests:
+    - name: github-arc
+      repository: manifests/github-arc
+      path: manifests
+      source: https://github.com/bitwise-media-group/github-arc-app-manifests
+      revision: "main@sha1:${GIT_COMMIT}"
