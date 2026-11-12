@@ -1,0 +1,17 @@
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# Build context for Dockerfile.runner, the repo's only image: only the mise
+# config the image installs from. (Not Dockerfile.runner.dockerignore: the
+# toolchain's lint-docker hadolints every root Dockerfile.* as a Dockerfile.) .mise/mise.lock is
+# a symlink into .mise/.mise/, where the real lockfile and its locks/ sidecars
+# live, so both are kept.
+*
+!mise.toml
+!tasks.toml
+!.mise/config.toml
+!.mise/mise.lock
+!.mise/.mise/mise.lock
+!.mise/.mise/locks/
+!.mise/common/tasks.toml
+!.mise/archetypes/containers/tasks.toml

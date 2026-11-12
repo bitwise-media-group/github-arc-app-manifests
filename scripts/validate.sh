@@ -72,21 +72,22 @@ render_resourcesets() { # render_resourcesets <tree> <out-dir>
   done
 }
 
-# The runner guard. verify-platform-signature admits only mirrored images,
-# and the scale-set chart's own dind template would reach Docker Hub - so
-# every image the rendered scale sets name must sit under the platform
-# mirror, under a versioned tag: mirror tags are immutable, so a moving tag
-# (dind, latest, or none) names whatever digest was first published under
-# it and never follows upstream. And the per-arch gate must hold: exactly
+# The runner guard. verify-platform-signature admits only platform-signed
+# images, and the scale-set chart's own dind template would reach Docker Hub
+# - so every image the rendered scale sets name must sit under the platform
+# registry (the mirror's images/ or this repo's own runner image), under a
+# versioned tag (X.Y.Z or vX.Y.Z): platform tags are immutable, so a moving
+# tag (dind, latest, or none) names whatever digest was first published
+# under it and never follows upstream. And the per-arch gate must hold: exactly
 # the architectures whose GITHUB_ARC_<ARCH>_ENABLED is "true" render a
 # HelmRelease linux-<arch> (plus, on aws, a NodePool github-arc-<arch>).
 check_runners() { # check_runners <tree> <out-dir>
   local tree="$1" out="$2" rendered="$2/rendered-common-resourceset.yaml" arch want got images foreign moving
   images="$(yq 'select(.kind == "HelmRelease") | .spec.values.template.spec | (.initContainers[], .containers[]) | .image' "$rendered" | grep -v '^---$' | sort -u)"
   [[ -n "$images" ]] || { echo "runner guard: no runner images rendered in $rendered" >&2; exit 1; }
-  foreign="$(printf '%s\n' "$images" | grep -v "^${CONTAINER_REGISTRY}/images/" || true)"
-  [[ -z "$foreign" ]] || { echo "runner guard: runner images outside the platform mirror: $foreign" >&2; exit 1; }
-  moving="$(printf '%s\n' "$images" | grep -Ev ':[0-9]+\.[0-9]+\.[0-9]+[^/:]*$' || true)"
+  foreign="$(printf '%s\n' "$images" | grep -v -e "^${CONTAINER_REGISTRY}/images/" -e "^${PLATFORM_REGISTRY}/images/github-arc-runner:" || true)"
+  [[ -z "$foreign" ]] || { echo "runner guard: runner images outside the platform registry: $foreign" >&2; exit 1; }
+  moving="$(printf '%s\n' "$images" | grep -Ev ':v?[0-9]+\.[0-9]+\.[0-9]+[^/:]*$' || true)"
   [[ -z "$moving" ]] || { echo "runner guard: runner images without a versioned tag: $moving" >&2; exit 1; }
   want=""
   for arch in amd64 arm64; do

@@ -146,8 +146,10 @@ jobs:
 ```
 
 Each job gets a fresh ephemeral pod: the runner container plus a privileged `dockerd` sidecar (`DOCKER_HOST` points at
-its socket), on a node dedicated to github-arc. The runner image is `actions/actions-runner`; it is not GitHub's hosted
-`ubuntu-latest` image, so install the tools a job needs (or run the job in a `container:`).
+its socket), on a node dedicated to github-arc. The runner image is this repository's `Dockerfile.runner`:
+`actions/actions-runner` with mise and every tool the shared toolchain pins already installed where `jdx/mise-action`
+looks, so a mise-based job installs nothing. It is not GitHub's hosted `ubuntu-latest` image, so install anything else a
+job needs (or run the job in a `container:`).
 
 ### Scale to zero
 
