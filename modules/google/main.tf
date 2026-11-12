@@ -103,7 +103,7 @@ locals {
 # privileged runners' nodes; GKE adds kubernetes.io/arch=arm64:NoSchedule
 # to the Arm pool by itself, which the image's arm64 scheduling tolerates.
 module "node_pool" {
-  source   = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/node-pool?ref=223fab7691bf460fcc04c5f0991f76b9f23e640d"
+  source   = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/node-pool?ref=ddc4be2df68bf7e24f59d7bb646e5a440a79b204"
   for_each = local.elected
 
   project  = var.cluster.project
@@ -167,7 +167,7 @@ resource "google_secret_manager_secret_iam_member" "sync" {
 # application module: every name it mints (release application-github-arc,
 # ConfigMap github-arc-vars) is the one the manifests expect.
 module "application" {
-  source = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/application?ref=223fab7691bf460fcc04c5f0991f76b9f23e640d"
+  source = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/application?ref=ddc4be2df68bf7e24f59d7bb646e5a440a79b204"
 
   name    = "github-arc"
   cluster = var.cluster

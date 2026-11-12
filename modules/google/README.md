@@ -55,8 +55,8 @@ with their containers. See the repository README for the `github-arc-vars` contr
 
 | Name | Source | Version |
 | ---- | ------ | ------- |
-| application | git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/application | 223fab7691bf460fcc04c5f0991f76b9f23e640d |
-| node\_pool | git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/node-pool | 223fab7691bf460fcc04c5f0991f76b9f23e640d |
+| application | git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/application | ddc4be2df68bf7e24f59d7bb646e5a440a79b204 |
+| node\_pool | git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/node-pool | ddc4be2df68bf7e24f59d7bb646e5a440a79b204 |
 
 ## Resources
 
