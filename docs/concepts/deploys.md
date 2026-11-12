@@ -1,7 +1,7 @@
 # What the image deploys
 
-`kustomize build manifests/deploy/<tree>` is everything a cluster applies: the cloud-neutral core in `deploy/common`,
-the image's self-definition in `flux/`, and the per-cloud overlay.
+`kustomize build manifests/<tree>` is everything a cluster applies: the cloud-neutral core in `common` and the per-cloud
+overlay.
 
 | Object                                                        | Where             | What it is                                                         |
 | ------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------ |

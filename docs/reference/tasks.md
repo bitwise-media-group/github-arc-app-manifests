@@ -21,21 +21,19 @@ forwards: `make <task>` is `mise run <task>`.
 
 ## The render harness
 
-`scripts/validate.sh` renders and validates everything a cluster would apply from this image, once per deploy tree and
+`scripts/validate.sh` renders and validates everything a cluster would apply from this image, once per cloud tree and
 signing mode (`{aws,google}` × `{keyless,keyed}`):
 
-1. **kustomize-build** the deploy tree (common + flux + the cloud overlay).
+1. **kustomize-build** the cloud's tree (common + the cloud overlay).
 2. **Substitute** `cluster-vars` and `github-arc-vars` from the fixtures in `tests/` the way the seeded Kustomization
    does (`postBuild.substituteFrom`), faithfully to the controller's roundtrip. Substitution is strict, so a variable
    neither ConfigMap publishes fails; and a null guard fails any `${VAR}`-bearing scalar that would become null on a
    cluster.
-3. **Assert the seed contract**: the `flux/` objects carry exactly the names, namespace and prune label the
-   `modules/application` seed creates. See [The seed contract](../concepts/seed-contract.md).
-4. **Render every ResourceSet** with `flux-operator build resourceset` and the sample inputs under `tests/inputs/`.
-5. **Guard the runners**: every image the rendered scale sets name sits under the platform mirror
+3. **Render every ResourceSet** with `flux-operator build resourceset` and the sample inputs under `tests/inputs/`.
+4. **Guard the runners**: every image the rendered scale sets name sits under the platform mirror
    (`${CONTAINER_REGISTRY}/images/`), and exactly the architectures whose `GITHUB_ARC_<ARCH>_ENABLED` is `"true"` render
    a `HelmRelease linux-<arch>` (and, on aws, a `NodePool github-arc-<arch>`).
-6. **kubeconform** the results against the Flux, flux-operator and vendored CRD schemas in `tests/schemas/`.
+5. **kubeconform** the results against the Flux, flux-operator and vendored CRD schemas in `tests/schemas/`.
 
 The application's vars come from `tests/github-arc-vars.env` (plus `github-arc-vars.aws.env` on aws), at the modules'
 defaults. The keyed passes also source `tests/github-arc-vars.keyed.env`, which renders the other side of each gate:

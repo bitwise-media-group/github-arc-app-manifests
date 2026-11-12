@@ -17,9 +17,9 @@
 #   - one dedicated, scale-to-zero GKE node pool per elected architecture
 #     (github-arc-<arch>, through the cluster module's modules/node-pool),
 #     tainted so only the runner pods - which select it in the image's
-#     deploy/google/scheduling.yaml - ever land on it;
+#     google/scheduling.yaml - ever land on it;
 #   - the three Secret Manager containers the image syncs into the
-#     github-arc-github-app Secret (deploy/google/secrets.yaml), or with
+#     github-arc-github-app Secret (google/secrets.yaml), or with
 #     create_secrets = false only their grants, each read resource-side by
 #     the sync KSA's federated principal;
 #   - everything that touches the cluster, through the cluster module's
@@ -75,8 +75,6 @@ locals {
       GITHUB_ARC_CONFIG_URL   = var.github.config_url
       GITHUB_ARC_RUNNER_GROUP = var.github.runner_group != null ? var.github.runner_group : ""
 
-      GITHUB_ARC_MANIFESTS_SEMVER          = var.manifests_semver
-      SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS = var.signed_identity_subject
     },
     merge([
       for arch, runner in local.runners : {
@@ -94,7 +92,7 @@ locals {
 
   wi_prefix = "principal://iam.googleapis.com/projects/${var.cluster.project_number}/locations/global/workloadIdentityPools/${var.cluster.workload_pool}/subject"
 
-  # The KSA the image's SecretSync runs as (deploy/google/service-accounts.yaml).
+  # The KSA the image's SecretSync runs as (google/service-accounts.yaml).
   sync_member = "${local.wi_prefix}/ns/github-arc/sa/github-arc-secrets"
 }
 
@@ -105,7 +103,7 @@ locals {
 # privileged runners' nodes; GKE adds kubernetes.io/arch=arm64:NoSchedule
 # to the Arm pool by itself, which the image's arm64 scheduling tolerates.
 module "node_pool" {
-  source   = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/node-pool?ref=d74b5323d24b795a644a184a57aa85ea109e3de2"
+  source   = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/node-pool?ref=223fab7691bf460fcc04c5f0991f76b9f23e640d"
   for_each = local.elected
 
   project  = var.cluster.project
@@ -169,14 +167,17 @@ resource "google_secret_manager_secret_iam_member" "sync" {
 # application module: every name it mints (release application-github-arc,
 # ConfigMap github-arc-vars) is the one the manifests expect.
 module "application" {
-  source = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/application?ref=d74b5323d24b795a644a184a57aa85ea109e3de2"
+  source = "git::https://github.com/bitwise-media-group/terraform-google-gke-flux.git//modules/application?ref=223fab7691bf460fcc04c5f0991f76b9f23e640d"
 
   name    = "github-arc"
   cluster = var.cluster
 
   image = {
-    url    = "oci://${var.cluster.platform_registry}/manifests/github-arc"
-    semver = var.manifests_semver
+    url     = "oci://${var.cluster.platform_registry}/manifests/github-arc"
+    semver  = var.image.semver
+    channel = var.image.channel
+    # the image's per-cloud tree sits at its root (./aws, ./google)
+    path = "./${var.cluster.tree}"
     # the first install also waits on the GitHub App secret sync (the
     # image's own Kustomization carries the same 10m)
     timeout = "10m"

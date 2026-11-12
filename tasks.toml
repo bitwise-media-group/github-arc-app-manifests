@@ -48,9 +48,8 @@ run = [{ task = "fmt-prose" }, { task = "fmt-terraform" }, { task = "license" }]
 
 # Repo-local replacement for the toolchain's lint-kustomize: kubescape
 # fatals on directories that contain ONLY custom resources it cannot map.
-# manifests/flux is Flux objects only and manifests/deploy/common is CRs
-# plus a Namespace; the per-cloud overlays carry the ServiceAccounts and
-# scheduling ConfigMaps kubescape can score.
+# manifests/common is CRs plus a Namespace; the per-cloud trees carry the
+# ServiceAccounts and scheduling ConfigMaps kubescape can score.
 [lint-kustomize]
 hide = true
 dir = "{{config_root}}"
@@ -58,7 +57,7 @@ env = { KUBESCAPE_SEVERITY = "{{vars.kubescape_severity}}" }
 run = """
 set -eu
 export KUBECONFIG=/nonexistent
-for d in manifests/deploy/aws/ manifests/deploy/google/; do
+for d in manifests/aws/ manifests/google/; do
   echo "lint-kustomize: kubescape scan $d"
   kubescape scan "$d" --logger warning --severity-threshold "${KUBESCAPE_SEVERITY:-high}" --exceptions .kubescape/exceptions.json
 done

@@ -15,7 +15,7 @@
 # The same shape as modules/google but for the capacity: there is no node
 # group here. The runners' dedicated scale-to-zero capacity is one Karpenter
 # NodePool per elected arch, shipped in the image
-# (deploy/aws/resourceset-nodes.yaml) on the platform's EC2NodeClass default
+# (aws/resourceset-nodes.yaml) on the platform's EC2NodeClass default
 # and shaped by the GITHUB_ARC_<ARCH>_* vars this module publishes.
 #
 # Everything else that touches the cluster goes through terraform-aws-eks-
@@ -76,8 +76,6 @@ locals {
       GITHUB_ARC_CONFIG_URL   = var.github.config_url
       GITHUB_ARC_RUNNER_GROUP = var.github.runner_group != null ? var.github.runner_group : ""
 
-      GITHUB_ARC_MANIFESTS_SEMVER          = var.manifests_semver
-      SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS = var.signed_identity_subject
     },
     merge([
       for arch, runner in local.runners : {
@@ -119,14 +117,17 @@ resource "aws_secretsmanager_secret" "main" {
 # ConfigMap github-arc-vars, role <cluster>-secrets-github-arc-github-arc-secrets)
 # is the one the manifests expect.
 module "application" {
-  source = "git::https://github.com/bitwise-media-group/terraform-aws-eks-flux.git//modules/application?ref=b1aa85c0553db184f6d2eb73c3403d76a9a9857b"
+  source = "git::https://github.com/bitwise-media-group/terraform-aws-eks-flux.git//modules/application?ref=9fa078f941c9ba8ef97d38eb1fd9ebea01a80999"
 
   name    = "github-arc"
   cluster = var.cluster
 
   image = {
-    url    = "oci://${var.cluster.platform_registry}/manifests/github-arc"
-    semver = var.manifests_semver
+    url     = "oci://${var.cluster.platform_registry}/manifests/github-arc"
+    semver  = var.image.semver
+    channel = var.image.channel
+    # the image's per-cloud tree sits at its root (./aws, ./google)
+    path = "./${var.cluster.tree}"
     # the first install also waits on the GitHub App secret sync (the
     # image's own Kustomization carries the same 10m)
     timeout = "10m"
@@ -144,7 +145,7 @@ module "application" {
   vars       = merge(var.extra_vars, local.vars)
   namespaces = ["github-arc"]
 
-  # The podless sync KSA (deploy/aws/service-accounts.yaml annotates it with
+  # The podless sync KSA (aws/service-accounts.yaml annotates it with
   # ${SECRETS_ROLE_PREFIX}github-arc-github-arc-secrets).
   secret_readers = [
     { namespace = "github-arc", service_account = "github-arc-secrets" },

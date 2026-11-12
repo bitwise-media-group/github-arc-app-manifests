@@ -20,8 +20,9 @@ build:
   #           release pull request's)
   #   stable  vX.Y.Z, added to the newest X.Y.Z edge build when the release is
   #           cut (patchy build promote), never rebuilt
-  # The seed's semver range (GITHUB_ARC_MANIFESTS_SEMVER) follows vX.Y.Z; edge
-  # builds are pre-releases, outside any plain range.
+  # The seed (modules/{aws,google} image) follows vX.Y.Z by default; edge
+  # builds are pre-releases, outside any plain range, and image.channel =
+  # "edge" follows them.
   tags:
     - "${VERSION}-edge.${PATCHY_TIMESTAMP}.g${GIT_COMMIT:0:7}"
     - "sha-${GIT_COMMIT}"

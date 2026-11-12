@@ -1,9 +1,8 @@
 # Copyright 2026 BitWise Media Group Ltd
 # SPDX-License-Identifier: MIT
 #
-# The google deploy tree: the cloud-neutral core, the image's
-# self-definition (../../flux, so the seed objects are adopted and owned by
-# this Kustomization), the google secret-sync dialect (GKE Integrated
+# The google tree (what the seed applies on GKE): the cloud-neutral core,
+# the google secret-sync dialect (GKE Integrated
 # Secret Synchronization, run as the github-arc-secrets KSA whose accessor
 # grants modules/google makes), and the runner pods' scheduling onto the
 # github-arc-<arch> GKE node pools modules/google creates.
@@ -11,7 +10,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../common
-  - ../../flux
   - service-accounts.yaml
   - secrets.yaml
   - scheduling.yaml

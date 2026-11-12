@@ -1,9 +1,8 @@
 # Copyright 2026 BitWise Media Group Ltd
 # SPDX-License-Identifier: MIT
 #
-# The aws deploy tree: the cloud-neutral core, the image's self-definition
-# (../../flux, so the seed objects are adopted and owned by this
-# Kustomization), the aws secret-sync dialect - Secrets Store CSI
+# The aws tree (what the seed applies on EKS): the cloud-neutral core, the
+# aws secret-sync dialect - Secrets Store CSI
 # SecretProviderClass + secrets-store-sync SecretSync, run as the
 # github-arc-secrets KSA whose IRSA reader role modules/aws mints (through
 # terraform-aws-eks-flux's modules/application) - and the runners' dedicated
@@ -13,7 +12,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../common
-  - ../../flux
   - service-accounts.yaml
   - secrets.yaml
   - scheduling.yaml

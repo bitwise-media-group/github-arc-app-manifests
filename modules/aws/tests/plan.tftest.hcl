@@ -99,8 +99,7 @@ run "vars_contract" {
       "GITHUB_ARC_ARM64_CPU_LIMIT", "GITHUB_ARC_ARM64_ENABLED", "GITHUB_ARC_ARM64_INSTANCE_FAMILIES",
       "GITHUB_ARC_ARM64_MAX_NODES", "GITHUB_ARC_ARM64_MAX_RUNNERS", "GITHUB_ARC_ARM64_MEMORY",
       "GITHUB_ARC_ARM64_MEMORY_LIMIT",
-      "GITHUB_ARC_CONFIG_URL", "GITHUB_ARC_MANIFESTS_SEMVER", "GITHUB_ARC_RUNNER_GROUP",
-      "SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS",
+      "GITHUB_ARC_CONFIG_URL", "GITHUB_ARC_RUNNER_GROUP",
     ])
     error_message = "github-arc-vars must carry exactly the keys the manifests consume"
   }
@@ -124,7 +123,7 @@ run "application_seed" {
 
   assert {
     condition     = output.release == "application-github-arc"
-    error_message = "the seed is release application-github-arc, the name the image's flux/ objects are adopted from"
+    error_message = "the seed is release application-github-arc, the release that owns the github-arc-manifests seed on every apply"
   }
 
   assert {
@@ -133,7 +132,7 @@ run "application_seed" {
   }
 
   assert {
-    condition     = module.application.path == "./deploy/aws"
+    condition     = module.application.path == "./aws"
     error_message = "the seed applies the image's aws tree"
   }
 }
@@ -195,7 +194,7 @@ run "extra_vars_cannot_shadow" {
   command = plan
 
   variables {
-    extra_vars = { SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS = "^x$" }
+    extra_vars = { GITHUB_ARC_CONFIG_URL = "https://example.com" }
   }
 
   expect_failures = [var.extra_vars]
@@ -229,4 +228,17 @@ run "foreign_registry_rejected" {
   }
 
   expect_failures = [var.cluster]
+}
+
+run "image_follows_the_edge_channel" {
+  command = plan
+
+  variables {
+    image = { channel = "edge", semver = "^0.2.0-0" }
+  }
+
+  assert {
+    condition     = output.release == "application-github-arc"
+    error_message = "a bounded edge channel passes straight through to the seed"
+  }
 }

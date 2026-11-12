@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 # Render and validate everything a cluster would apply from this image, once
-# per deploy tree and signing mode ({aws,google} x {keyless,keyed}):
-#   1. kustomize-build the deploy tree (common + flux + the cloud overlay)
+# per cloud tree and signing mode ({aws,google} x {keyless,keyed}):
+#   1. kustomize-build the cloud's tree (common + the cloud overlay)
 #   2. substitute cluster-vars AND github-arc-vars the way the seeded
 #      Kustomization does (postBuild.substituteFrom), faithfully to the
 #      controller's roundtrip - so an empty var that would become null on a
@@ -14,8 +14,6 @@
 #   3. render every ResourceSet with sample inputs (flux-operator CLI)
 #   4. kubeconform the results against Flux + flux-operator + CRD schemas
 #      (the toolchain's kubeconform.sh)
-# plus the seed-contract guard: the flux/ objects must carry exactly the
-# names, namespace and prune label the modules/application seed creates.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,27 +39,12 @@ substitute() { # substitute <in-file> <out-file>
   "$HELPERS/flux-substitute.sh" "$1" "$2"
 }
 
-# The seed contract: modules/application creates a ResourceSetInputProvider
-# and a ResourceSet named github-arc-manifests in flux-system, and the
-# ResourceSet emits Kustomization/github-arc; this image ships the same objects
-# so the Kustomization adopts them. A drift here is silent on a cluster
-# (two providers, two Kustomizations, an orphaned seed), so it is asserted.
-check_seed_contract() {
-  local built="$1" kinds
-  kinds="$(yq 'select(.kind == "ResourceSetInputProvider" or .kind == "ResourceSet") | select(.metadata.namespace == "flux-system") | .kind + "/" + .metadata.name + "@" + (.metadata.labels["kustomize.toolkit.fluxcd.io/prune"] // "prunable")' "$built" | grep -v '^---$' | sort | tr '\n' ' ')"
-  [[ "$kinds" == "ResourceSet/github-arc-manifests@disabled ResourceSetInputProvider/github-arc-manifests@disabled " ]] \
-    || { echo "seed contract: flux-system must carry exactly RSIP + ResourceSet github-arc-manifests, both prune-disabled; got: $kinds" >&2; exit 1; }
-  yq 'select(.kind == "ResourceSet" and .metadata.name == "github-arc-manifests") | .spec.resourcesTemplate' "$built" \
-    | grep -q '^  name: github-arc$' \
-    || { echo "seed contract: ResourceSet/github-arc-manifests must emit Kustomization/github-arc" >&2; exit 1; }
-}
-
 # Every ResourceSet-bearing source file needs a fixture at
-# tests/inputs/<flux|common|tree>/<file>[.<variant>].yaml; each variant
+# tests/inputs/<common|tree>/<file>[.<variant>].yaml; each variant
 # renders the same ResourceSet with a different input set.
 render_resourcesets() { # render_resourcesets <tree> <out-dir>
   local tree="$1" out="$2" src scope file inputs variant vbase
-  for src in "$ROOT/manifests/flux"/*.yaml "$ROOT/manifests/deploy/common"/*.yaml "$ROOT/manifests/deploy/$tree"/*.yaml; do
+  for src in "$ROOT/manifests/common"/*.yaml "$ROOT/manifests/$tree"/*.yaml; do
     grep -q '^kind: ResourceSet$' "$src" || continue
     scope="$(basename "$(dirname "$src")")"
     file="$(basename "$src" .yaml)"
@@ -112,10 +95,9 @@ run_pass() { # run_pass <tree> <mode>
   local tree="$1" mode="$2" out
   out="$BUILD/$tree-$mode"
   mkdir -p "$out"
-  echo ">> [$tree/$mode] building deploy/$tree"
-  kustomize build "$ROOT/manifests/deploy/$tree" > "$out/raw.yaml"
+  echo ">> [$tree/$mode] building manifests/$tree"
+  kustomize build "$ROOT/manifests/$tree" > "$out/raw.yaml"
   substitute "$out/raw.yaml" "$out/deploy.yaml"
-  check_seed_contract "$out/deploy.yaml"
   echo ">> [$tree/$mode] rendering resourcesets with sample inputs"
   render_resourcesets "$tree" "$out"
   check_runners "$tree" "$out"

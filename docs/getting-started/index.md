@@ -1,16 +1,16 @@
 # Overview
 
-github-arc-app-manifests publishes self-hosted GitHub Actions runners as a self-owned **application image** for the
-platform clusters. The image, `oci://<registry>/manifests/github-arc`, is a cosign-signed OCI artifact holding two
+github-arc-app-manifests publishes self-hosted GitHub Actions runners as a **application image** for the platform
+clusters. The image, `oci://<registry>/manifests/github-arc`, is a cosign-signed OCI artifact holding two
 [Actions Runner Controller](https://github.com/actions/actions-runner-controller) scale sets, `linux-amd64` and
 `linux-arm64`, their Docker-in-Docker pod template, the GitHub App credential sync and, on aws, their Karpenter
-NodePools - plus its own flux self-definition.
+NodePools.
 
 The terraform modules under `modules/` install it onto a cluster as a self-contained application. They seed the image
-once, and flux owns it from then on. They also create everything it needs outside the cluster - the GitHub App's secret
-containers and their read grants, the `github-arc-vars` ConfigMap and, on google, the runners' GKE node pools - through
-the cluster modules' generic `modules/application` and `modules/node-pool`. The cluster module itself has no knowledge
-of github-arc.
+and pick which builds it follows on every apply. They also create everything it needs outside the cluster - the GitHub
+App's secret containers and their read grants, the `github-arc-vars` ConfigMap and, on google, the runners' GKE node
+pools - through the cluster modules' generic `modules/application` and `modules/node-pool`. The cluster module itself
+has no knowledge of github-arc.
 
 ## What a workflow gets
 
@@ -48,15 +48,14 @@ flowchart LR
   pools["modules/node-pool<br/>(google only)"]
   img[("Platform registry<br/>manifests/github-arc")]
   flux["flux-system<br/>RSIP + ResourceSet<br/>github-arc-manifests"]
-  ks["Kustomization/github-arc<br/>./deploy/&lt;PLATFORM_TREE&gt;"]
+  ks["Kustomization/github-arc<br/>./&lt;PLATFORM_TREE&gt;"]
   arc["arc component<br/>arc-systems"]
   tf -- "seed + github-arc-vars<br/>secrets · grants" --> app
   tf -- "github-arc-&lt;arch&gt;" --> pools
-  app -- "bootstrap only" --> flux
+  app -- "every apply" --> flux
   flux -- "newest semver match<br/>digest-pinned, verified" --> img
   flux --> ks
   ks -. "dependsOn" .-> arc
-  ks -. "adopts its own parents" .-> flux
 ```
 
 Next: [Installing github-arc](installing.md).

@@ -24,12 +24,12 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
         <img class="pam-hero__mark" src="{{ 'assets/logo-mark.svg' | url }}" alt="" aria-hidden="true" />
         <div class="pam-hero__inner">
             <div class="pam-kicker"><span class="pam-dot"></span>// Self-hosted GitHub Actions runners</div>
-            <h1 class="pam-title">Seeded once.<br /><em>Owned by flux.</em></h1>
+            <h1 class="pam-title">Picked by terraform.<br /><em>Deployed by flux.</em></h1>
             <p class="pam-lede">
                 Two Actions Runner Controller scale sets, <code>linux-amd64</code> and <code>linux-arm64</code>, with
                 Docker-in-Docker on dedicated scale-to-zero nodes, ship as one cosign-signed OCI artifact,
-                <code>manifests/github-arc</code>. A per-cloud terraform module seeds it onto a cluster once; from then on
-                the image owns itself, and a release changes it with no terraform apply.
+                <code>manifests/github-arc</code>. A per-cloud terraform module seeds it onto a cluster and picks which
+                builds it follows, so a release and the infrastructure it needs land in the same apply.
             </p>
             <div class="pam-term">
                 <div class="pam-term__bar">
@@ -109,9 +109,8 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
                     <div class="pam-pane__head"><b>2</b><span>make test</span></div>
                     <div class="pam-pane__body">
                         <div class="pam-dim">$ make test <span class="pam-blink"></span></div>
-                        <div class="pam-run"><span class="t">build</span><span class="d">deploy/{aws,google} × {keyless,keyed}</span><span class="ok">✓</span></div>
+                        <div class="pam-run"><span class="t">build</span><span class="d">{aws,google} × {keyless,keyed}</span><span class="ok">✓</span></div>
                         <div class="pam-run"><span class="t">subst</span><span class="d">cluster-vars + github-arc-vars, strict, null-guarded</span><span class="ok">✓</span></div>
-                        <div class="pam-run"><span class="t">seed</span><span class="d">flux/ carries exactly the seeded RSIP + ResourceSet</span><span class="ok">✓</span></div>
                         <div class="pam-run"><span class="t">render</span><span class="d">every ResourceSet with sample inputs</span><span class="ok">✓</span></div>
                         <div class="pam-run"><span class="t">schema</span><span class="d">kubeconform · Flux + vendored CRDs</span><span class="ok">✓</span></div>
                         <div class="pam-run"><span class="t">tf</span><span class="d">terraform test · aws · google</span><span class="ok">✓</span></div>
@@ -184,10 +183,10 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
                         <path d="M16 16h5v5" />
                     </svg>
                 </div>
-                <h3>Self-owned after seeding</h3>
+                <h3>Owned by terraform</h3>
                 <p>
-                    terraform seeds the <code>github-arc-manifests</code> input provider and ResourceSet once; the image
-                    ships the same two objects, so the first reconcile adopts them and flux owns them from then on.
+                    terraform keeps the <code>github-arc-manifests</code> input provider and ResourceSet on every
+                    apply; the image ships no copy, so the range moves with the infrastructure it needs.
                 </p>
             </div>
             <div class="pam-feat">
@@ -200,10 +199,10 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
                         <path d="m16 3-2 18" />
                     </svg>
                 </div>
-                <h3>Follows version tags</h3>
+                <h3>Follows releases or a channel</h3>
                 <p>
-                    The seed tracks <code>GITHUB_ARC_MANIFESTS_SEMVER</code> and turns the newest match into a
-                    digest-pinned, signature-verified <code>OCIRepository</code>. Channel tags are for humans.
+                    The seed tracks the module's <code>image.semver</code> or <code>image.channel</code> and turns the
+                    newest match into a digest-pinned, signature-verified <code>OCIRepository</code>. No tag moves.
                 </p>
             </div>
             <div class="pam-feat">
@@ -310,7 +309,7 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
 
     <!-- THREE STEPS -->
     <section class="pam-section pam-section--last">
-        <h2 class="pam-eyebrow">// FROM MODULE CALL TO SELF-OWNED APPLICATION</h2>
+        <h2 class="pam-eyebrow">// FROM MODULE CALL TO RUNNING APPLICATION</h2>
         <div class="pam-conn pam-steps">
             <div class="pam-step">
                 <div class="pam-step__body">
@@ -338,9 +337,9 @@ front matter — so adding a module to zensical.toml is all the landing needs. -
             <div class="pam-step">
                 <div class="pam-step__body">
                     <div class="pam-step__num">02</div>
-                    <h3>Hand over</h3>
-                    <p>The first reconcile adopts the seeded objects. The image now owns its semver floor, gates,
-                        verify identity and interval.</p>
+                    <h3>Reconcile</h3>
+                    <p>Flux resolves the newest build in range and applies it. Terraform keeps the range, gates,
+                        verify identity and interval; the image keeps everything it deploys.</p>
                     <a class="pam-step__alt" href="{{ 'concepts/seed-contract/' | url }}">The seed contract
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

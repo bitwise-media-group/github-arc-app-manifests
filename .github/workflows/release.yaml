@@ -66,7 +66,7 @@ jobs:
     # The manifests image (patchy.yaml), in this repository's own job: a
     # composite action keeps the job's identity, so the image is signed as
     # .../github-arc-app-manifests/.github/workflows/release.yaml@refs/heads/main,
-    # the identity clusters verify (SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS). Registries
+    # the identity clusters verify (the seed's signed_identity_subject). Registries
     # and signing come from org variables (GOOGLE_MANIFEST_PUBLISHER_SA is this
     # repository's own); nothing about them is committed.
     publish:

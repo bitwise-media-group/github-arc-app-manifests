@@ -11,7 +11,7 @@
 
 [project]
 site_name = "github-arc-app-manifests"
-site_description = "Self-hosted GitHub Actions runners (linux-amd64, linux-arm64) as a self-owned application image for the platform clusters: a cosign-signed OCI artifact seeded once by terraform and owned by flux from then on, plus the per-cloud modules that install it."
+site_description = "Self-hosted GitHub Actions runners (linux-amd64, linux-arm64) as an application image for the platform clusters: a cosign-signed OCI artifact whose builds terraform picks on every apply and flux deploys, plus the per-cloud modules that install it."
 site_url = "https://oss.bitwisemedia.uk/github-arc-app-manifests/"
 repo_url = "https://github.com/bitwise-media-group/github-arc-app-manifests"
 repo_name = "bitwise-media-group/github-arc-app-manifests"

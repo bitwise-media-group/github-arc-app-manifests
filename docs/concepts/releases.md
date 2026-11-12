@@ -1,7 +1,9 @@
 # Releases & channels
 
-Every tag is immutable. Clusters follow **releases** through the seed's semver range (`GITHUB_ARC_MANIFESTS_SEMVER`);
-edge builds exist for development clusters, `flux pull artifact`, and the platform's own smoke tests.
+Every tag is immutable. By default clusters follow **releases** through the seed's semver range (the modules'
+`image.semver`, `<1.0.0 >=0.1.0`). A development cluster can follow the **edge** channel instead
+(`image.channel = "edge"`), every edge build or, with a pre-release bound such as `image.semver = "^0.2.0-0"`, every
+edge build up to the next breaking change.
 
 | The release workflow's push… | The publish job                                                                                                    |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -29,7 +31,7 @@ Publishing is the release workflow's `publish` job, which runs github-workflows'
 ## Signing
 
 Signing is keyless. The Fulcio certificate subject is this repository's release workflow on `main`, which is what the
-seed's `OCIRepository` verify block (`SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS`) matches on every cluster:
+seed's `OCIRepository` verify block (the modules' `signed_identity_subject`) matches on every cluster:
 
 ```text
 https://github.com/bitwise-media-group/github-arc-app-manifests/.github/workflows/release.yaml@refs/heads/main

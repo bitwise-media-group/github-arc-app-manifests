@@ -1,12 +1,12 @@
 # github-arc-app-manifests
 
-Self-hosted GitHub Actions runners as a self-owned **application image** for the platform clusters. This repo publishes
+Self-hosted GitHub Actions runners as an **application image** for the platform clusters. This repo publishes
 `oci://<registry>/manifests/github-arc`: a cosign-signed OCI artifact holding two [Actions Runner Controller][arc] scale
 sets, `linux-amd64` and `linux-arm64`, with Docker-in-Docker on dedicated scale-to-zero capacity, plus the per-cloud
-terraform modules that install it onto a cluster. The modules seed the image once and flux owns it from then on;
-everything outside the cluster (the GitHub App's secret containers and grants, the `github-arc-vars` ConfigMap, the GKE
-runner node pools) goes through the cluster modules' generic `modules/application` and `modules/node-pool`. The cluster
-module itself has no knowledge of github-arc.
+terraform modules that install it onto a cluster. The modules seed the image and pick which builds it follows on every
+apply; everything outside the cluster (the GitHub App's secret containers and grants, the `github-arc-vars` ConfigMap,
+the GKE runner node pools) goes through the cluster modules' generic `modules/application` and `modules/node-pool`. The
+cluster module itself has no knowledge of github-arc.
 
 The application is named `github-arc` because `arc` is the platform component that runs the ARC controller
 (`arc-systems/arc-gha-rs-controller`). This image ships only the scale sets, and depends on that component.
@@ -65,16 +65,17 @@ The full walk-through is [Installing github-arc][installing] on the documentatio
 
 ## What the image deploys
 
-- **The seed's own copy** (`manifests/flux/`): the RSIP and ResourceSet `github-arc-manifests`, emitting `OCIRepository`
-  and `Kustomization github-arc` (path `./deploy/${PLATFORM_TREE}`, substituting from `cluster-vars` and
-  `github-arc-vars`, depending on `kyverno-policies` and `arc`, plus `secret-sync` and `karpenter` on aws).
-- **The core** (`deploy/common/`): the `github-arc` namespace (Pod Security `privileged`), the mirrored
-  `gha-runner-scale-set` chart on the platform's `ARC_SEMVER` range, and one `HelmRelease linux-<arch>` per elected
-  architecture, gated inline by `GITHUB_ARC_<ARCH>_ENABLED`. The dind pod is spelled out with `containerMode` unset,
-  because the chart hardcodes `docker:dind` from Docker Hub, which the platform signature policy rejects.
-- **The overlays** (`deploy/{google,aws}/`): the GitHub App sync into `Secret/github-arc-github-app` in the cloud's
-  dialect, and each scale set's scheduling - the `github-arc-<arch>` GKE node pool on google (plus GKE's Arm taint on
-  arm64), a Karpenter `NodePool github-arc-<arch>` on `EC2NodeClass default` on aws.
+- **No seed objects.** The modules' seed (the RSIP and ResourceSet `github-arc-manifests`, kept by terraform on every
+  apply) emits `OCIRepository` and `Kustomization github-arc` (path `./${PLATFORM_TREE}`, substituting from
+  `cluster-vars` and `github-arc-vars`, depending on `kyverno-policies` and `arc`, plus `secret-sync` and `karpenter` on
+  aws); the image ships no copy.
+- **The core** (`common/`): the `github-arc` namespace (Pod Security `privileged`), the mirrored `gha-runner-scale-set`
+  chart on the platform's `ARC_SEMVER` range, and one `HelmRelease linux-<arch>` per elected architecture, gated inline
+  by `GITHUB_ARC_<ARCH>_ENABLED`. The dind pod is spelled out with `containerMode` unset, because the chart hardcodes
+  `docker:dind` from Docker Hub, which the platform signature policy rejects.
+- **The overlays** (`google/`, `aws/`): the GitHub App sync into `Secret/github-arc-github-app` in the cloud's dialect,
+  and each scale set's scheduling - the `github-arc-<arch>` GKE node pool on google (plus GKE's Arm taint on arm64), a
+  Karpenter `NodePool github-arc-<arch>` on `EC2NodeClass default` on aws.
 
 ## `github-arc-vars`
 
@@ -86,8 +87,6 @@ The full walk-through is [Installing github-arc][installing] on the documentatio
 | `GITHUB_ARC_<ARCH>_MAX_RUNNERS`                                                                                 | `runners.<arch>.max_runners`     |
 | `GITHUB_ARC_<ARCH>_CPU` / `_MEMORY`                                                                             | `runners.<arch>.cpu` / `.memory` |
 | `GITHUB_ARC_<ARCH>_{INSTANCE_FAMILIES,CAPACITY_TYPES,CPU_LIMIT,MEMORY_LIMIT,MAX_NODES,CONSOLIDATE_AFTER}` (aws) | `runners.<arch>.*`               |
-| `GITHUB_ARC_MANIFESTS_SEMVER`                                                                                   | `manifests_semver`               |
-| `SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS`                                                                          | `signed_identity_subject`        |
 
 The modules publish every key for both architectures, elected or not; the manifests read them bare. See [Variables &
 inputs][variables].
@@ -98,7 +97,8 @@ Every push to main that cuts no release publishes `manifests/` as an immutable
 `manifests/github-arc:<next version>-edge.<timestamp>.g<commit>` build; merging the release PR cuts `vX.Y.Z` and adds
 that tag to the newest edge build of the version, without rebuilding. Both run in `release.yaml`'s publish job
 (github-workflows' `patchy-publish` action), signed keylessly as this repository's release workflow on `main`. Clusters
-follow **releases** through `GITHUB_ARC_MANIFESTS_SEMVER`; edge builds are pre-releases outside any plain range.
+follow **releases** through the modules' `image.semver` by default; `image.channel = "edge"` follows the edge builds
+instead (bounded with a pre-release range such as `image.semver = "^0.2.0-0"`).
 
 ## Developing
 

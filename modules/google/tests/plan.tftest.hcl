@@ -91,8 +91,7 @@ run "vars_contract" {
     condition = sort(keys(output.vars)) == tolist([
       "GITHUB_ARC_AMD64_CPU", "GITHUB_ARC_AMD64_ENABLED", "GITHUB_ARC_AMD64_MAX_RUNNERS", "GITHUB_ARC_AMD64_MEMORY",
       "GITHUB_ARC_ARM64_CPU", "GITHUB_ARC_ARM64_ENABLED", "GITHUB_ARC_ARM64_MAX_RUNNERS", "GITHUB_ARC_ARM64_MEMORY",
-      "GITHUB_ARC_CONFIG_URL", "GITHUB_ARC_MANIFESTS_SEMVER", "GITHUB_ARC_RUNNER_GROUP",
-      "SIGNED_IDENTITY_GITHUB_ARC_MANIFESTS",
+      "GITHUB_ARC_CONFIG_URL", "GITHUB_ARC_RUNNER_GROUP",
     ])
     error_message = "github-arc-vars must carry exactly the keys the manifests consume"
   }
@@ -104,7 +103,6 @@ run "vars_contract" {
       && output.vars.GITHUB_ARC_AMD64_MAX_RUNNERS == "4"
       && output.vars.GITHUB_ARC_AMD64_CPU == "3"
       && output.vars.GITHUB_ARC_AMD64_MEMORY == "10Gi"
-      && output.vars.GITHUB_ARC_MANIFESTS_SEMVER == "<1.0.0 >=0.1.0"
     )
     error_message = "the defaults must match the harness fixture (tests/github-arc-vars.env)"
   }
@@ -115,7 +113,7 @@ run "application_seed" {
 
   assert {
     condition     = output.release == "application-github-arc"
-    error_message = "the seed is release application-github-arc, the name the image's flux/ objects are adopted from"
+    error_message = "the seed is release application-github-arc, the release that owns the github-arc-manifests seed on every apply"
   }
 
   assert {
@@ -124,7 +122,7 @@ run "application_seed" {
   }
 
   assert {
-    condition     = module.application.path == "./deploy/google"
+    condition     = module.application.path == "./google"
     error_message = "the seed applies the image's google tree"
   }
 }
@@ -250,5 +248,18 @@ run "keyed_cluster" {
   assert {
     condition     = output.release == "application-github-arc"
     error_message = "a KMS-keyed cluster must seed github-arc verified against the cosign-pub Secret"
+  }
+}
+
+run "image_follows_the_edge_channel" {
+  command = plan
+
+  variables {
+    image = { channel = "edge", semver = "^0.2.0-0" }
+  }
+
+  assert {
+    condition     = output.release == "application-github-arc"
+    error_message = "a bounded edge channel passes straight through to the seed"
   }
 }

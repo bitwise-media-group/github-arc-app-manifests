@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 output "release" {
-  description = "The bootstrap-only seed release (application-github-arc) in the cluster's flux namespace."
+  description = "The seed release (application-github-arc) in the cluster's flux namespace, reconciled by every apply."
   value       = module.application.release
 }
 
