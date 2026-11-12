@@ -41,16 +41,19 @@
 # under a chart bump; the cost is tracking upstream's dind template by
 # hand, which has been stable across the 0.x line.
 #
-# The images are referenced by tag, the platform convention: the
-# flux-containers mirror copies each locked digest under its upstream tag,
-# and Kyverno verifies the mirror's signature on whatever digest the tag
-# resolves to. The runner and dind tags are the newest the mirror has
-# published (the github-arc-runner-image and github-arc-dind-image
-# providers), so a reviewed mirror bump rolls the scale sets on the next
-# reconcile with no change here, and a tag the mirror has not published
-# can never be picked. Mirror tags are immutable, so both are versioned
-# releases: the sidecar runs docker:<version>-dind, never the moving
-# docker:dind, which could never be re-published at a new digest. A
+# The images are referenced by tag, the platform convention, and Kyverno
+# verifies the signature on whatever digest the tag resolves to. The runner
+# is this repo's own image (Dockerfile.runner: actions-runner with mise and
+# the shared toolchain pre-installed, so a job's mise-action installs
+# nothing), published by `patchy build`; its tag is the newest stable
+# vX.Y.Z (the github-arc-runner-image provider), so a release rolls the
+# scale sets on the next reconcile with no change here. It serves both the
+# runner container and the externals-copying init container. dind is the
+# flux-containers mirror's: the mirror copies each locked digest under its
+# upstream tag, and the tag is the newest it has published (the
+# github-arc-dind-image provider). Every tag here is immutable, so both are
+# versioned releases: the sidecar runs docker:<version>-dind, never the
+# moving docker:dind, which could never be re-published at a new digest. A
 # provider that finds no tag fails the render (inputs are strict), which
 # leaves the installed scale sets as they were.
 #
@@ -175,7 +178,7 @@ spec:
               # volume the dind daemon also mounts, so `docker run` steps
               # that bind-mount them find them
               - name: init-dind-externals
-                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:<< inputs.github_arc_runner_image.tag >>
+                image: ${PLATFORM_REGISTRY}/images/github-arc-runner:<< inputs.github_arc_runner_image.tag >>
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -217,7 +220,7 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:<< inputs.github_arc_runner_image.tag >>
+                image: ${PLATFORM_REGISTRY}/images/github-arc-runner:<< inputs.github_arc_runner_image.tag >>
                 command: ["/home/runner/run.sh"]
                 env:
                   - name: DOCKER_HOST

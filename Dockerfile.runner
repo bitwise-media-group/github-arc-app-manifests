@@ -1,0 +1,82 @@
+# syntax=docker/dockerfile:1.10
+# Copyright 2026 BitWise Media Group Ltd
+# SPDX-License-Identifier: MIT
+
+# The github-arc runner image: the upstream actions-runner with mise and the
+# shared toolchain (bitwise-media-group/toolchain, mounted here at .mise/)
+# pre-installed, so a job's jdx/mise-action step finds every pinned tool
+# already in place and installs nothing. The scale sets run it for both the
+# runner container and the init container that copies its externals
+# (manifests/common/resourceset.yaml).
+#
+# Everything lands where mise-action looks by default, for the runner user:
+#
+#   ~/.local/share/mise/bin/mise   the mise binary, at the version the org's
+#                                  reusable workflows pin (mise-action skips
+#                                  its own download when this one matches)
+#   ~/.local/share/mise/installs/  every tool in .mise/config.toml, lazy pins
+#                                  included, at its pinned version
+#
+# MISE_DATA_DIR and friends are deliberately left unset, so the image, the
+# action and a job's `mise` all agree on those defaults. A job's `mise install`
+# then resolves the same config from its checkout and finds every version
+# installed; only a pin this image predates (a toolchain bump newer than the
+# image) is downloaded.
+#
+# Built and published by `patchy build` (the github-arc-runner entry in
+# patchy.yaml) with the repo root as context; .dockerignore narrows that
+# context to the mise config.
+
+# Pinned by digest (renovate bumps it); the tag is informational.
+FROM ghcr.io/actions/actions-runner:2.338.2@sha256:6d0b2d80d80f143f77dcb676e50920100bbb547e39e883454d57f45ab8c31300
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Keep in step with the `version:` (and `sha256:`) the reusable workflows in
+# bitwise-media-group/github-workflows pass to jdx/mise-action, so the action
+# finds this binary current. The checksums are SHASUMS256.txt from the
+# release; bump all three together.
+# renovate: datasource=github-releases depName=jdx/mise
+ARG MISE_VERSION=2026.11.4
+ARG MISE_SHA256_AMD64=0296d9cba9324106d4e0962bb94a2072902f3658813aeb3b09504947bb8ddc2b
+ARG MISE_SHA256_ARM64=219d1daa41d110ed004b6a9c4029000046b23b3498f45d17c7897a166177e80b
+ARG TARGETARCH
+
+# The upstream image's runner user (uid/gid 1001), by number so hadolint and
+# the kubelet need no passwd lookup to resolve it.
+USER 1001:1001
+WORKDIR /home/runner
+
+RUN case "${TARGETARCH}" in \
+  amd64) platform=linux-x64 sha256="${MISE_SHA256_AMD64}" ;; \
+  arm64) platform=linux-arm64 sha256="${MISE_SHA256_ARM64}" ;; \
+  *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+  esac \
+  && mkdir -p .local/share/mise/bin \
+  && curl -fsSL -o .local/share/mise/bin/mise \
+  "https://github.com/jdx/mise/releases/download/v${MISE_VERSION}/mise-v${MISE_VERSION}-${platform}" \
+  && echo "${sha256}  .local/share/mise/bin/mise" | sha256sum -c - \
+  && chmod 0755 .local/share/mise/bin/mise
+
+# mise itself only, not its shims: a shim (python3, say) would shadow the
+# system binary even in a job that never sets mise up. mise-action puts the
+# tools' own bin directories on PATH for the steps after it.
+ENV PATH=/home/runner/.local/share/mise/bin:${PATH}
+
+# The toolchain config: the root mise.toml, the shared .mise/config.toml and
+# its lockfile (whose sha256s every download is verified against), plus the
+# task files the root config includes so it loads cleanly. Staged outside the
+# workspace and removed once installed; the installs are keyed by tool and
+# version, not by where the config lived.
+COPY --chown=1001:1001 . /tmp/toolchain/
+WORKDIR /tmp/toolchain
+
+# --include-lazy: the lazy pins too, which a job would otherwise download the
+# first time it calls one. --locked: fail rather than install anything the
+# lockfile does not pin. GITHUB_TOKEN (optional) lifts the GitHub API rate
+# limit the github:/aqua: backends hit.
+RUN --mount=type=secret,id=github_token,env=GITHUB_TOKEN,required=false \
+  MISE_TRUSTED_CONFIG_PATHS=/tmp/toolchain mise install --include-lazy --locked \
+  && rm -rf /tmp/toolchain
+
+WORKDIR /home/runner

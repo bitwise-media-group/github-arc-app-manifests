@@ -1,17 +1,21 @@
 # Copyright 2026 BitWise Media Group Ltd
 # SPDX-License-Identifier: MIT
 
-# patchy's configuration for this repo: `patchy build` packages manifests/ as
-# the github-arc application's Flux OCI artifact. Only the build block lives here.
+# patchy's configuration for this repo: `patchy build` builds the runner image
+# (Dockerfile.runner) and packages manifests/ as the github-arc application's
+# Flux OCI artifact. Only the scan and build blocks live here.
 # The registries and the signing config are never committed: the release
 # workflow's patchy-publish step (bitwise-media-group/github-workflows) writes
 # them from org variables as a lower config layer, and `make build`
 # (`patchy build --all --dry-run`) needs neither.
 
 scan:
-  # The artifact is unrendered kustomize, not an image; configuration scanning
-  # runs over the rendered per-cloud overlays in lint-kustomize instead.
+  # Off by default: the manifests artifact is unrendered kustomize, whose
+  # configuration scanning runs over the rendered per-cloud overlays in
+  # lint-kustomize instead. The runner image turns it back on for itself.
   enabled: false
+  scanners:
+    osv: { enabled: true }
 
 build:
   # Every tag is immutable:
@@ -26,6 +30,44 @@ build:
   tags:
     - "${VERSION}-edge.${PATCHY_TIMESTAMP}.g${GIT_COMMIT:0:7}"
     - "sha-${GIT_COMMIT}"
+  # The runner image the scale sets run: actions-runner plus mise and the
+  # shared toolchain, pre-installed. It shares the tag templates (and so the
+  # edge/stable channels and promotion) with the manifests artifact; the
+  # scale sets run its newest stable vX.Y.Z (the github-arc-runner-image
+  # provider in manifests/common/input-provider.yaml).
+  images:
+    - name: github-arc-runner
+      repository: images/github-arc-runner
+      dockerfile: Dockerfile.runner
+      context: .
+      architectures: [amd64, arm64]
+      secrets:
+        # Lifts the GitHub API rate limit for mise's github:/aqua: backends
+        # while it installs the toolchain; the build works without it.
+        - id: github_token
+          env: GITHUB_TOKEN
+          optional: true
+      scan:
+        enabled: true
+        failOn: [CRITICAL, HIGH]
+        ignoreUnfixed: true
+        # Accepted findings live in security/allowlists/github-arc-runner.yaml;
+        # `make update-allowlists ENTRY=github-arc-runner` regenerates it from a
+        # fresh build and scan, and the pull request is where the risk is
+        # accepted - the same model as the mirror's gha-runner-scale-set entry.
+        allowlist:
+          generate: true
+          preamble: |
+            The upstream actions-runner base (pinned by digest in
+            Dockerfile.runner) carries bundled dependencies this repository
+            cannot patch: the runner's node20/node24 externals and their npm
+            trees, the .NET runner's own deps, and the docker/containerd/buildx
+            binaries. They are the same findings the flux-containers mirror
+            reviews and accepts for actions-runner in its gha-runner-scale-set
+            entry; see that allowlist's preamble for the reachability analysis.
+            Everything this image adds is a mise-installed toolchain pin, bumped
+            by Renovate in bitwise-media-group/toolchain - a finding there is
+            fixed by rebuilding on the bumped pin, not accepted here.
   manifests:
     - name: github-arc
       repository: manifests/github-arc
