@@ -31,9 +31,9 @@ aws only (`modules/aws`), read by `aws/resourceset-nodes.yaml`:
 
 ## Platform variables the image reads
 
-From `cluster-vars`: `PLATFORM_REGISTRY` (the chart and the image), `CONTAINER_REGISTRY` (the runner and dind images and
-their tag providers), `PLATFORM_TREE`, `SECRET_PREFIX`, `GCP_PROJECT` (google) or `AWS_REGION` and `SECRETS_ROLE_PREFIX`
-(aws), `OCI_PROVIDER` and `ARTIFACT_TAG_PROVIDER`, and the signing set (`SIGNED_IDENTITY_ISSUER`,
+From `cluster-vars`: `PLATFORM_REGISTRY` (the chart, the image and the runner image), `CONTAINER_REGISTRY` (the dind
+image and its tag provider), `PLATFORM_TREE`, `SECRET_PREFIX`, `GCP_PROJECT` (google) or `AWS_REGION` and
+`SECRETS_ROLE_PREFIX` (aws), `OCI_PROVIDER` and `ARTIFACT_TAG_PROVIDER`, and the signing set (`SIGNED_IDENTITY_ISSUER`,
 `SIGNED_IDENTITY_CHARTS`, `SIGNED_IDENTITY_KMS_KEY`, `COSIGN_PUBLIC_KEY`). `ARC_SEMVER` is optional: the scale-set chart
 follows it with the arc component's own default, `<1.0.0 >=0.14.0`, so the scale sets always track the controller's
 range.

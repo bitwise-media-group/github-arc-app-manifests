@@ -27,15 +27,18 @@ spec:
     limit: 1
 ---
 # The runner and dind images ride their own release trains, independent of
-# the chart: the mirror's gha-runner-scale-set entry tracks both (an
-# images.track rule for the runner, a Renovate-bumped pin for dind), so a
-# new runner or dockerd ships without a chart release. These providers list
-# the mirrored image tags - only reviewed, scanned and signed tags ever
-# reach the platform registry, and nothing here reaches upstream, so the
-# scale sets follow the mirror on an air-gapped cluster too - and the
-# ResourceSet feeds each pick into the runner pod template. A major moves
-# only by widening a range here, matching the mirror, where Renovate
-# proposes no majors either.
+# the chart, so a new runner or dockerd ships without a chart release. These
+# providers list registry tags - only reviewed, scanned and signed builds
+# ever reach the platform registry, and nothing here reaches upstream, so
+# the scale sets follow it on an air-gapped cluster too - and the
+# ResourceSet feeds each pick into the runner pod template.
+#
+# The runner is this repo's own image (Dockerfile.runner: actions-runner
+# plus mise and the shared toolchain, pre-installed), which `patchy build`
+# publishes beside the manifests artifact with the same edge/stable tags.
+# The range admits stable vX.Y.Z only - edge builds are pre-releases and
+# sha-<commit> is no version - so a release rolls the scale sets on the next
+# reconcile. A major moves only by widening the range here.
 apiVersion: fluxcd.controlplane.io/v1
 kind: ResourceSetInputProvider
 metadata:
@@ -45,11 +48,15 @@ metadata:
     fluxcd.controlplane.io/reconcileEvery: 30m
 spec:
   type: "${ARTIFACT_TAG_PROVIDER:=GARArtifactTag}"
-  url: oci://${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner
+  url: oci://${PLATFORM_REGISTRY}/images/github-arc-runner
   filter:
-    semver: "<3.0.0 >=2.338.0"
+    semver: "<1.0.0 >=0.1.0"
     limit: 1
 ---
+# dind: the mirror's gha-runner-scale-set entry tracks it as a Renovate-bumped
+# pin, and a major moves only by widening the range here, matching the
+# mirror, where Renovate proposes no majors either.
+#
 # docker:<version>-dind only. The repository also holds plain docker:<version>
 # tags, and the frozen moving `dind` tag published before the mirror pinned a
 # version, so includeTag narrows to the variant first. semver then sorts
