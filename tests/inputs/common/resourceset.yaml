@@ -1,8 +1,42 @@
 # Copyright 2026 BitWise Media Group Ltd
 # SPDX-License-Identifier: MIT
 
-# Sample inputs standing in for the platform registry's tag provider over
-# the mirrored gha-runner-scale-set chart (id, tag and digest).
-- id: "1"
-  tag: "0.15.0"
-  digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+# Static stand-ins for the platform registry's tag providers over the
+# mirrored gha-runner-scale-set chart and the runner and dind images
+# (passed via --inputs-from-provider so the Permute strategy namespaces them
+# exactly as in the cluster). Names must match the real providers.
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: github-arc
+  namespace: github-arc
+spec:
+  type: Static
+  defaultValues:
+    id: "1"
+    tag: "0.15.0"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: github-arc-runner-image
+  namespace: github-arc
+spec:
+  type: Static
+  defaultValues:
+    id: "2"
+    tag: "2.338.2"
+    digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: github-arc-dind-image
+  namespace: github-arc
+spec:
+  type: Static
+  defaultValues:
+    id: "3"
+    tag: "29.9.3-dind"
+    digest: "sha256:2222222222222222222222222222222222222222222222222222222222222222"

@@ -41,9 +41,13 @@ substitute() { # substitute <in-file> <out-file>
 
 # Every ResourceSet-bearing source file needs a fixture at
 # tests/inputs/<common|tree>/<file>[.<variant>].yaml; each variant
-# renders the same ResourceSet with a different input set.
+# renders the same ResourceSet with a different input set. Two fixture
+# shapes: a plain list of input sets (--inputs-from), or Static
+# ResourceSetInputProvider manifests (--inputs-from-provider) for a
+# ResourceSet using the Permute strategy, which namespaces inputs by
+# provider name - only provider-shaped fixtures reproduce that.
 render_resourcesets() { # render_resourcesets <tree> <out-dir>
-  local tree="$1" out="$2" src scope file inputs variant vbase
+  local tree="$1" out="$2" src scope file inputs variant vbase inputs_flag
   for src in "$ROOT/manifests/common"/*.yaml "$ROOT/manifests/$tree"/*.yaml; do
     grep -q '^kind: ResourceSet$' "$src" || continue
     scope="$(basename "$(dirname "$src")")"
@@ -55,7 +59,9 @@ render_resourcesets() { # render_resourcesets <tree> <out-dir>
       vbase="$(basename "$inputs" .yaml)"
       [[ "$vbase" =~ ^${file}(\.[A-Za-z0-9-]+)?$ ]] || continue
       variant="$vbase"
-      if ! flux-operator build resourceset -f "$out/rs-$scope-$file.yaml" --inputs-from "$inputs" \
+      inputs_flag="--inputs-from"
+      grep -q '^kind: ResourceSetInputProvider$' "$inputs" && inputs_flag="--inputs-from-provider"
+      if ! flux-operator build resourceset -f "$out/rs-$scope-$file.yaml" "$inputs_flag" "$inputs" \
         > "$out/rendered-$scope-$variant.yaml" 2> "$out/rendered-$scope-$variant.err"; then
         grep -q "no objects were generated" "$out/rendered-$scope-$variant.err" \
           || { cat "$out/rendered-$scope-$variant.err" >&2; exit 1; }
@@ -69,15 +75,19 @@ render_resourcesets() { # render_resourcesets <tree> <out-dir>
 # The runner guard. verify-platform-signature admits only mirrored images,
 # and the scale-set chart's own dind template would reach Docker Hub - so
 # every image the rendered scale sets name must sit under the platform
-# mirror. And the per-arch gate must hold: exactly the architectures whose
-# GITHUB_ARC_<ARCH>_ENABLED is "true" render a HelmRelease linux-<arch>
-# (plus, on aws, a NodePool github-arc-<arch>).
+# mirror, under a versioned tag: mirror tags are immutable, so a moving tag
+# (dind, latest, or none) names whatever digest was first published under
+# it and never follows upstream. And the per-arch gate must hold: exactly
+# the architectures whose GITHUB_ARC_<ARCH>_ENABLED is "true" render a
+# HelmRelease linux-<arch> (plus, on aws, a NodePool github-arc-<arch>).
 check_runners() { # check_runners <tree> <out-dir>
-  local tree="$1" out="$2" rendered="$2/rendered-common-resourceset.yaml" arch want got images foreign
+  local tree="$1" out="$2" rendered="$2/rendered-common-resourceset.yaml" arch want got images foreign moving
   images="$(yq 'select(.kind == "HelmRelease") | .spec.values.template.spec | (.initContainers[], .containers[]) | .image' "$rendered" | grep -v '^---$' | sort -u)"
   [[ -n "$images" ]] || { echo "runner guard: no runner images rendered in $rendered" >&2; exit 1; }
   foreign="$(printf '%s\n' "$images" | grep -v "^${CONTAINER_REGISTRY}/images/" || true)"
   [[ -z "$foreign" ]] || { echo "runner guard: runner images outside the platform mirror: $foreign" >&2; exit 1; }
+  moving="$(printf '%s\n' "$images" | grep -Ev ':[0-9]+\.[0-9]+\.[0-9]+[^/:]*$' || true)"
+  [[ -z "$moving" ]] || { echo "runner guard: runner images without a versioned tag: $moving" >&2; exit 1; }
   want=""
   for arch in amd64 arm64; do
     local var; var="GITHUB_ARC_$(tr '[:lower:]' '[:upper:]' <<<"$arch")_ENABLED"

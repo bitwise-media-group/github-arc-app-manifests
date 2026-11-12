@@ -11,12 +11,12 @@ cluster module itself has no knowledge of github-arc.
 The application is named `github-arc` because `arc` is the platform component that runs the ARC controller
 (`arc-systems/arc-gha-rs-controller`). This image ships only the scale sets, and depends on that component.
 
-| Repo                                                   | Role                                                                                 |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| **github-arc-app-manifests** (this)                    | the runner scale sets image, and the terraform modules that install it               |
-| [flux-manifests]                                       | the platform: the `arc` controller component, Karpenter, secret sync, Kyverno        |
-| [flux-containers]                                      | the mirror: the `gha-runner-scale-set` chart and the runner and `docker:dind` images |
-| [terraform-google-gke-flux] / [terraform-aws-eks-flux] | the clusters, `modules/application`, `modules/node-pool`                             |
+| Repo                                                   | Role                                                                          |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| **github-arc-app-manifests** (this)                    | the runner scale sets image, and the terraform modules that install it        |
+| [flux-manifests]                                       | the platform: the `arc` controller component, Karpenter, secret sync, Kyverno |
+| [flux-containers]                                      | the mirror: the `gha-runner-scale-set` chart and the runner and dind images   |
+| [terraform-google-gke-flux] / [terraform-aws-eks-flux] | the clusters, `modules/application`, `modules/node-pool`                      |
 
 ## Using the runners
 

@@ -33,3 +33,5 @@ ignores:
   - "CHANGELOG.md"
   # owned by terraform-docs (see the header) - same set as .prettierignore
   - "modules/*/README.md"
+  # terraform init cruft
+  - "**/.terraform/**"

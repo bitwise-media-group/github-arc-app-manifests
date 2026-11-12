@@ -19,7 +19,8 @@
 #     not a zero-scaled leftover). The vars are read inline, never through
 #     spec.inputs: post-build substitution round-trips spec.inputs through
 #     YAML, turning "true"/"false" into bools and an empty value into null.
-#   - The chart tag comes from the input provider (input-provider.yaml),
+#   - The chart and image tags come from the input providers
+#     (input-provider.yaml),
 #     and the OCIRepository's verify block changes SHAPE with the signing
 #     mode (the cosign-pub Secret in keyed mode, the Fulcio identities
 #     keyless), exactly as the platform's arc component renders it.
@@ -41,10 +42,17 @@
 # hand, which has been stable across the 0.x line.
 #
 # The images are referenced by tag, the platform convention: the
-# flux-containers mirror copies each locked digest under its upstream tag
-# (docker:dind is locked to the digest its images.lock.yaml records, and
-# re-locked only through a reviewed mirror PR), and Kyverno verifies the
-# mirror's signature on whatever digest the tag resolves to.
+# flux-containers mirror copies each locked digest under its upstream tag,
+# and Kyverno verifies the mirror's signature on whatever digest the tag
+# resolves to. The runner and dind tags are the newest the mirror has
+# published (the github-arc-runner-image and github-arc-dind-image
+# providers), so a reviewed mirror bump rolls the scale sets on the next
+# reconcile with no change here, and a tag the mirror has not published
+# can never be picked. Mirror tags are immutable, so both are versioned
+# releases: the sidecar runs docker:<version>-dind, never the moving
+# docker:dind, which could never be re-published at a new digest. A
+# provider that finds no tag fails the render (inputs are strict), which
+# leaves the installed scale sets as they were.
 #
 # Scheduling is the overlay's: each HelmRelease merges
 # github-arc-linux-<arch>-scheduling (values.yaml: template.spec
@@ -59,9 +67,19 @@ metadata:
   name: github-arc
   namespace: github-arc
 spec:
+  # Permute joins the chart and image providers into one input set (each
+  # exports exactly one, so the product stays one) and namespaces every
+  # provider's inputs under its normalized name: inputs.github_arc.*,
+  # inputs.github_arc_runner_image.*, inputs.github_arc_dind_image.*.
+  inputStrategy:
+    name: Permute
   inputsFrom:
     - kind: ResourceSetInputProvider
       name: github-arc
+    - kind: ResourceSetInputProvider
+      name: github-arc-runner-image
+    - kind: ResourceSetInputProvider
+      name: github-arc-dind-image
   resourcesTemplate: |
     << $keyed := ne "${SIGNED_IDENTITY_KMS_KEY:=}" "" >>
     << $runners := dict >>
@@ -92,7 +110,7 @@ spec:
       url: oci://${PLATFORM_REGISTRY}/charts/gha-runner-scale-set
       provider: "${OCI_PROVIDER:=gcp}"
       ref:
-        tag: << inputs.tag >>
+        tag: << inputs.github_arc.tag >>
       verify:
         provider: cosign
         << if $keyed >>
@@ -157,7 +175,7 @@ spec:
               # volume the dind daemon also mounts, so `docker run` steps
               # that bind-mount them find them
               - name: init-dind-externals
-                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:2.338.0
+                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:<< inputs.github_arc_runner_image.tag >>
                 command: ["cp"]
                 args: ["-r", "/home/runner/externals/.", "/home/runner/tmpDir/"]
                 volumeMounts:
@@ -169,7 +187,7 @@ spec:
               # the namespace is PSS privileged and the pods run only on
               # dedicated capacity.
               - name: dind
-                image: ${CONTAINER_REGISTRY}/images/docker.io/library/docker:dind
+                image: ${CONTAINER_REGISTRY}/images/docker.io/library/docker:<< inputs.github_arc_dind_image.tag >>
                 args:
                   - dockerd
                   - --host=unix:///var/run/docker.sock
@@ -199,7 +217,7 @@ spec:
                     mountPath: /home/runner/externals
             containers:
               - name: runner
-                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:2.338.0
+                image: ${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:<< inputs.github_arc_runner_image.tag >>
                 command: ["/home/runner/run.sh"]
                 env:
                   - name: DOCKER_HOST

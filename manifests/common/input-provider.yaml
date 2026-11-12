@@ -25,3 +25,50 @@ spec:
     # must not start with '>' or YAML reads it as a folded block scalar.
     semver: "${ARC_SEMVER:=<1.0.0 >=0.14.0}"
     limit: 1
+---
+# The runner and dind images ride their own release trains, independent of
+# the chart: the mirror's gha-runner-scale-set entry tracks both (an
+# images.track rule for the runner, a Renovate-bumped pin for dind), so a
+# new runner or dockerd ships without a chart release. These providers list
+# the mirrored image tags - only reviewed, scanned and signed tags ever
+# reach the platform registry, and nothing here reaches upstream, so the
+# scale sets follow the mirror on an air-gapped cluster too - and the
+# ResourceSet feeds each pick into the runner pod template. A major moves
+# only by widening a range here, matching the mirror, where Renovate
+# proposes no majors either.
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: github-arc-runner-image
+  namespace: github-arc
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: 30m
+spec:
+  type: "${ARTIFACT_TAG_PROVIDER:=GARArtifactTag}"
+  url: oci://${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner
+  filter:
+    semver: "<3.0.0 >=2.338.0"
+    limit: 1
+---
+# docker:<version>-dind only. The repository also holds plain docker:<version>
+# tags, and the frozen moving `dind` tag published before the mirror pinned a
+# version, so includeTag narrows to the variant first. semver then sorts
+# what is left: a tag without a range sorts reverse-alphabetically
+# (29.9.3 above 29.10.0). `-dind` parses as a semver pre-release, which a
+# range only admits when it names a pre-release itself - hence the -0
+# bounds. Constraint order matters: kustomize drops the quotes, so the
+# range must not start with '>' or YAML reads it as a folded block scalar.
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: github-arc-dind-image
+  namespace: github-arc
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: 30m
+spec:
+  type: "${ARTIFACT_TAG_PROVIDER:=GARArtifactTag}"
+  url: oci://${CONTAINER_REGISTRY}/images/docker.io/library/docker
+  filter:
+    includeTag: '^\d+\.\d+\.\d+-dind$'
+    semver: "<30.0.0-0 >=29.0.0-0"
+    limit: 1
