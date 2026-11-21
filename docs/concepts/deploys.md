@@ -7,7 +7,7 @@ overlay.
 | ------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------ |
 | `Namespace/github-arc`                                        | common            | Pod Security `privileged` (enforce, audit, warn)                   |
 | `ResourceSetInputProvider/github-arc`                         | common            | the mirrored `gha-runner-scale-set` chart's tags, on `ARC_SEMVER`  |
-| `ResourceSetInputProvider/github-arc-runner-image`            | common            | the mirrored `actions-runner` image's tags, on 2.x                 |
+| `ResourceSetInputProvider/github-arc-runner-image`            | common            | the runner image's (`Dockerfile.runner`) stable tags, on 0.x       |
 | `ResourceSetInputProvider/github-arc-dind-image`              | common            | the mirrored `docker:<version>-dind` tags, on 29.x                 |
 | `ResourceSet/github-arc`                                      | common            | the chart's `OCIRepository` and one `HelmRelease` per elected arch |
 | `HelmRelease/linux-amd64`, `HelmRelease/linux-arm64`          | common (rendered) | the scale sets; the name is the `runs-on` label                    |
@@ -54,7 +54,7 @@ for customising dind:
 - an `init-dind-externals` init container (the runner image) copying the runner's externals to a shared volume;
 - the `dind` sidecar, a native sidecar (`restartPolicy: Always` on an init container), running
   `${CONTAINER_REGISTRY}/images/docker.io/library/docker:<tag>` privileged, with a `docker info` startup probe;
-- the `runner` container, `${CONTAINER_REGISTRY}/images/ghcr.io/actions/actions-runner:<tag>`, with
+- the `runner` container, `${PLATFORM_REGISTRY}/images/github-arc-runner:<tag>`, with
   `DOCKER_HOST=unix:///var/run/docker.sock`;
 - `work`, `dind-sock` and `dind-externals` emptyDir volumes.
 
@@ -62,30 +62,36 @@ The alternative, a `postRenderers` patch on the rendered `AutoscalingRunnerSet`,
 `AutoscalingRunnerSet` is a CRD, so kustomize can't strategic-merge its containers by name (without a schema, lists are
 replaced wholesale), and a JSON patch has to address the sidecar by index - an index the chart picks, and moves between
 `initContainers` and `containers` depending on the cluster's Kubernetes version. Spelled out, every image repository is
-a value this repository owns, and `make test` asserts each one sits under the platform mirror.
+a value this repository owns, and `make test` asserts each one sits under the platform registry.
 
-Images are referenced by tag, the platform convention: the mirror copies each digest its `images.lock.yaml` records
-under the upstream tag, and Kyverno verifies the mirror's signature on whatever the tag resolves to. Mirror tags are
-immutable, so both are versioned releases: the sidecar runs `docker:<version>-dind`, never the moving `docker:dind`,
-which could never be re-published at a new digest. `make test` rejects the unversioned `dind` and `latest` tags.
+Images are referenced by tag, the platform convention, and Kyverno verifies the signature on whatever the tag resolves
+to. The runner image is built here; the dind image is the mirror's, which copies each digest its `images.lock.yaml`
+records under the upstream tag. Platform tags are immutable, so both are versioned releases: the sidecar runs
+`docker:<version>-dind`, never the moving `docker:dind`, which could never be re-published at a new digest. `make test`
+rejects the unversioned `dind` and `latest` tags.
 
 ### Image updates
 
 The runner and dind images move independently of the chart, so neither tag is written here. Two input providers list the
-platform registry's mirrored tags, and the `ResourceSet` (with the `Permute` strategy, beside the chart's provider)
-renders the newest of each into the pod template:
+platform registry's tags, and the `ResourceSet` (with the `Permute` strategy, beside the chart's provider) renders the
+newest of each into the pod template:
 
-- `github-arc-runner-image`: `images/ghcr.io/actions/actions-runner`, semver `<3.0.0 >=2.338.0`;
+- `github-arc-runner-image`: `images/github-arc-runner`, semver `<1.0.0 >=0.1.0` - stable `vX.Y.Z` only, so edge builds
+  never reach the scale sets;
 - `github-arc-dind-image`: `images/docker.io/library/docker`, only tags matching `^\d+\.\d+\.\d+-dind$`, semver
   `<30.0.0-0 >=29.0.0-0`. `-dind` parses as a semver pre-release, which a range only admits when it names one itself,
   hence the `-0` bounds.
 
-A bump is reviewed once, in flux-containers: the mirror's `gha-runner-scale-set` entry tracks both images, and once its
-publish lands the tag, every cluster rolls its scale sets on the next provider reconcile (30 minutes). The providers
-only ever read the platform registry, so this works on an air-gapped cluster, and a tag the mirror has not published can
-never be picked. If a provider finds no matching tag, the `ResourceSet` fails to render (inputs are strict), and the
-installed scale sets stay as they were. A new major means widening the range here, a deliberate change in both
-repositories, since Renovate proposes no majors to the mirror either.
+The runner image is `Dockerfile.runner`: `actions-runner` (pinned by digest) with mise and every tool the shared
+toolchain pins, lazy ones included, installed under `/home/runner/.local/share/mise` - where `jdx/mise-action` looks -
+so a job's `mise install` finds them in place. `patchy build` publishes it with the manifests artifact (same edge and
+stable tags), and a release rolls it out. A dind bump is reviewed once, in flux-containers: the mirror's
+`gha-runner-scale-set` entry tracks it, and once its publish lands the tag, every cluster rolls its scale sets on the
+next provider reconcile (30 minutes). The providers only ever read the platform registry, so this works on an air-gapped
+cluster, and a tag the mirror has not published can never be picked. If a provider finds no matching tag, the
+`ResourceSet` fails to render (inputs are strict), and the installed scale sets stay as they were. A new major means
+widening the range here, a deliberate change in both repositories, since Renovate proposes no majors to the mirror
+either.
 
 ### Privilege
 
