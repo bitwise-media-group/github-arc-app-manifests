@@ -31,8 +31,9 @@ signing mode (`{aws,google}` × `{keyless,keyed}`):
    cluster.
 3. **Render every ResourceSet** with `flux-operator build resourceset` and the sample inputs under `tests/inputs/`.
 4. **Guard the runners**: every image the rendered scale sets name sits under the platform mirror
-   (`${CONTAINER_REGISTRY}/images/`), and exactly the architectures whose `GITHUB_ARC_<ARCH>_ENABLED` is `"true"` render
-   a `HelmRelease linux-<arch>` (and, on aws, a `NodePool github-arc-<arch>`).
+   (`${CONTAINER_REGISTRY}/images/`) or is the runner image (`${PLATFORM_REGISTRY}/images/github-arc-runner`), under a
+   versioned tag, and exactly the architectures whose `GITHUB_ARC_<ARCH>_ENABLED` is `"true"` render a
+   `HelmRelease linux-<arch>` (and, on aws, a `NodePool github-arc-<arch>`).
 5. **kubeconform** the results against the Flux, flux-operator and vendored CRD schemas in `tests/schemas/`.
 
 The application's vars come from `tests/github-arc-vars.env` (plus `github-arc-vars.aws.env` on aws), at the modules'

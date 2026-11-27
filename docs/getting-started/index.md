@@ -35,8 +35,9 @@ The image builds on three platform contracts, none of which knows github-arc exi
 
 - the **arc** component (elected in `PLATFORM_COMPONENTS`): the `actions.github.com` CRDs and the controller,
   `arc-systems/arc-gha-rs-controller`, that every scale set names;
-- the **mirror**: the `gha-runner-scale-set` chart and the runner and dind images, signed by flux-containers and
-  admitted by the platform's `verify-platform-signature` policy;
+- the **mirror**: the `gha-runner-scale-set` chart and the dind image, signed by flux-containers and admitted by the
+  platform's `verify-platform-signature` policy (the runner image is this repository's own, `Dockerfile.runner`,
+  published beside the manifests);
 - the **secret sync** dialect of each cloud, and on aws **Karpenter** with its shared `EC2NodeClass default`.
 
 ## Where it sits

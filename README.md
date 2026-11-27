@@ -13,9 +13,9 @@ The application is named `github-arc` because `arc` is the platform component th
 
 | Repo                                                   | Role                                                                          |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| **github-arc-app-manifests** (this)                    | the runner scale sets image, and the terraform modules that install it        |
+| **github-arc-app-manifests** (this)                    | the runner scale sets image, the runner image, and the terraform modules      |
 | [flux-manifests]                                       | the platform: the `arc` controller component, Karpenter, secret sync, Kyverno |
-| [flux-containers]                                      | the mirror: the `gha-runner-scale-set` chart and the runner and dind images   |
+| [flux-containers]                                      | the mirror: the `gha-runner-scale-set` chart and the dind image               |
 | [terraform-google-gke-flux] / [terraform-aws-eks-flux] | the clusters, `modules/application`, `modules/node-pool`                      |
 
 ## Using the runners
@@ -29,9 +29,10 @@ jobs:
       - run: docker build .
 ```
 
-Each job gets a fresh ephemeral pod (the `actions-runner` image plus a privileged `dockerd` sidecar) on a node dedicated
-to github-arc. Both scale sets run `minRunners: 0` on capacity that starts at zero nodes, so an idle cluster runs no
-runners; the first job after an idle spell waits a minute or two for a node.
+Each job gets a fresh ephemeral pod (the runner image, `actions-runner` with mise and the shared toolchain
+pre-installed, plus a privileged `dockerd` sidecar) on a node dedicated to github-arc. Both scale sets run
+`minRunners: 0` on capacity that starts at zero nodes, so an idle cluster runs no runners; the first job after an idle
+spell waits a minute or two for a node.
 
 ## Installing
 
